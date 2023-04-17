@@ -48,12 +48,15 @@ class Database:
 
     def close_connection(self):
         if self.__connection is not None and self.__connection.is_connected():
+            self.__cursor.close()
             self.__connection.close()
+            self.__cursor = None
+            self.__connection = None
 
     def __execute_query(
             self,
             query: str,
-            params: dict[str, str] | None = None
+            params: tuple | None = None
                      ):
         try:
             self.__cursor.execute(query, params)
@@ -66,7 +69,42 @@ class Database:
     def insert(
             self,
             table: str,
-            values: list[str]
+            values: tuple
                ):
-        values_str = ", ".join(["%s"])
+        parameters = ", ".join(["%s" for _ in range(len(values))])
+        print(parameters)
+        query = f"INSERT INTO %s VALUES ({parameters})"
+        return self.__execute_query(query, (table,) + values)
 
+    def select_all(self, table: str):
+        query = f"SELECT * FROM %s"
+        return self.__execute_query(query, (table,))
+
+    def select_where(
+            self,
+            table: str,
+            column: str,
+            value
+                    ):
+        query = "SELECT * FROM %s WHERE %s = %s"
+        return self.__execute_query(query, (table, column, value))
+
+    def update(
+            self,
+            table: str,
+            set_column: str,
+            set_value,
+            where_column: str,
+            where_value
+                ):
+        query = "UPDATE %s SET %s = %s WHERE %s = %s"
+        return self.__execute_query(query, (table, set_column, set_value, where_column, where_value))
+
+    def delete(
+            self,
+            table: str,
+            column: str,
+            value
+                ):
+        query = "DELETE FROM %s WHERE %s = %s"
+        return self.__execute_query(query, (table, column, value))
