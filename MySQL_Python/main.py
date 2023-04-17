@@ -1,26 +1,18 @@
 import mysql.connector as con
 from mysql.connector import errorcode as ec
+from server_functions import password_hash, password_verify
+from textwrap import dedent
 
 
 def main():
-    try:
-        db_con = con.connect(
-            user="Manager",
-            password="Manager",
-            host="172.21.142.41",
-            database="door_ctrl_system",
-            port=3306
-        )
-        print("ok!")
-        db_con.close()
-    except con.Error as err:
-        if err.errno == ec.ER_ACCESS_DENIED_ERROR:
-            print("Wrong username / password.")
-        elif err.errno == ec.ER_BAD_DB_ERROR:
-            print("The DB does not exist.")
-        else:
-            print("we are in error!")
-            print(err)
+    password = "esempio"
+    hashed = password_hash(password)
+    ctrl = password_verify("esempio", hashed)
+    print(dedent(f"""\
+        Password:   {password}
+        Hash:       {hashed}
+        Is correct: {ctrl}
+    """))
 
 
 if __name__ == "__main__":
