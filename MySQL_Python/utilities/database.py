@@ -89,6 +89,16 @@ class Database:
         query = f"SELECT * FROM {table} WHERE {column} = %s"
         return self.__execute_query(query, (value,))
 
+    def select_col_where(
+            self,
+            table: str,
+            column_return: str,
+            column_condition: str,
+            value
+    ):
+        query = f"SELECT {column_return} FROM {table} WHERE {column_condition} = %s"
+        return self.__execute_query(query, (value,))
+
     def update(
             self,
             table: str,
