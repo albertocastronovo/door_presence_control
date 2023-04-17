@@ -32,7 +32,7 @@ class Database:
                     port=self.__port
                 )
                 self.__connection = new_connection
-                self.__cursor = self.__connection.cursor()
+                self.__cursor = self.__connection.cursor(buffered=True)
                 return 0
             except con.Error as err:
                 if err.errno == ec.ER_ACCESS_DENIED_ERROR:  # the user has no access permissions
@@ -73,12 +73,12 @@ class Database:
                ):
         parameters = ", ".join(["%s" for _ in range(len(values))])
         print(parameters)
-        query = f"INSERT INTO %s VALUES ({parameters})"
-        return self.__execute_query(query, (table,) + values)
+        query = f"INSERT INTO {table} VALUES ({parameters})"
+        return self.__execute_query(query, values)
 
     def select_all(self, table: str):
-        query = f"SELECT * FROM %s"
-        return self.__execute_query(query, (table,))
+        query = f"SELECT * FROM {table}"
+        return self.__execute_query(query)
 
     def select_where(
             self,
@@ -86,8 +86,8 @@ class Database:
             column: str,
             value
                     ):
-        query = "SELECT * FROM %s WHERE %s = %s"
-        return self.__execute_query(query, (table, column, value))
+        query = f"SELECT * FROM {table} WHERE {column} = %s"
+        return self.__execute_query(query, (value,))
 
     def update(
             self,
@@ -97,8 +97,8 @@ class Database:
             where_column: str,
             where_value
                 ):
-        query = "UPDATE %s SET %s = %s WHERE %s = %s"
-        return self.__execute_query(query, (table, set_column, set_value, where_column, where_value))
+        query = f"UPDATE {table} SET {set_column} = %s WHERE {where_column} = %s"
+        return self.__execute_query(query, (set_value, where_value))
 
     def delete(
             self,
@@ -106,5 +106,5 @@ class Database:
             column: str,
             value
                 ):
-        query = "DELETE FROM %s WHERE %s = %s"
-        return self.__execute_query(query, (table, column, value))
+        query = f"DELETE FROM {table} WHERE {column} = %s"
+        return self.__execute_query(query, (value,))
