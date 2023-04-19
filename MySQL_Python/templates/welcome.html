@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>DCS Welcome page</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="static/bootstrap.min.css" media="screen" rel="stylesheet">
+  </head>
+  <body>
+    <div class="container">
+      <h1>Door Control System</h1>
+      <h2>WELCOME!</h2>
+      <br>
+      <p>Click <a href="/">here</a> to go to the homepage.</p>
+      {% for message in get_flashed_messages() %}
+        {{message}}
+      {% endfor %}
+    </div>
+  </body>
+</html>
+
