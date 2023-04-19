@@ -1,5 +1,6 @@
 from argon2 import hash_password, verify_password
 from argon2.exceptions import VerifyMismatchError
+from database import Database
 
 
 def password_hash(password: str) -> str:
@@ -18,3 +19,9 @@ def password_verify(password: str, test_hash: str) -> bool:
         )
     except VerifyMismatchError:
         return False
+
+
+def get_user_password(database: Database, user: str):
+    query = database.select_col_where("user", "password", "username", user)
+    return query[0][0]
+
