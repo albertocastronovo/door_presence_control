@@ -2,26 +2,38 @@
 from flask import Flask, render_template, url_for, request, redirect, \
     session, flash, g
 from functools import wraps
-import mysql.connector
+
+import sys
+sys.path.insert(0, 'C:/Users/marzi/PycharmProjects/IoT/door_presence_control/MySQL_Python/utilities')
+from database import Database
+from server_functions import get_user_password, password_verify, password_hash
 
 # create the application object
 app = Flask(__name__)
-
 app.secret_key = "secret_key"
 
-app.database = mysql.connector.connect(
+your_hashed_pw = password_hash("password2")
+print(your_hashed_pw)
+
+db = Database(
     host="localhost",
-    user="root",
-    password="",
-    database="door_cntrl_system"
+    database="door_cntrl_system",
+    port=3306
 )
+
+db.connect_as(
+    user="root",
+    password=""
+)
+
+#app.database = db
 
 
 # login required decorator
 def login_required(f):
     @wraps(f)
     def wrap(*args, **kwargs):
-        if 'logged_in' in session:
+        if "username" in session:
             return f(*args, **kwargs)
         else:
             flash('You need to login first.')
@@ -33,12 +45,9 @@ def login_required(f):
 @app.route('/')
 @login_required
 def home():  # g is used in flask to store a temporary object or request ---> db connection
-    g.db = connect_db()
-    cursor = g.db.cursor()
-    sql = 'SELECT * FROM user'
-    cursor.execute(sql)
-    posts = [dict(id=row[0], name=row[1], surname=row[2]) for row in cursor.fetchall()]
-    g.db.close()
+
+    query = db.select_all("user")
+    posts = [dict(id=row[0], name=row[1], surname=row[2]) for row in query]
     return render_template('index.html', posts=posts)  # render a template
 
 
@@ -49,27 +58,34 @@ def welcome():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    error = None
+
     if request.method == 'POST':
-        if request.form['username'] != 'admin' or request.form['password'] != 'password':
-            error = 'Invalid credentials. Please try again.'
-        else:
-            session['logged_in'] = True
-            flash('You were just logged in!')
-            return redirect(url_for('home'))
-    return render_template('login.html', error=error)
+        user = request.form["username"]
+        # gestire errori se il form è incompleto (non c'è l'utente, la password...)
+        saved_hash = get_user_password(db, user)
+        if saved_hash is None:
+            # gestire errore se l'utente è sbagliato (non esiste)
+            flash("Wrong username!")
+            return render_template("login.html")
+        user_pw = request.form["password"]
+        is_correct = password_verify(user_pw, saved_hash)
+        if not is_correct:
+            # gestire errore se la password è sbagliata (ma l'utente esiste)
+            flash("Wrong password!")
+            return render_template("login.html")
+        # qui la roba che succede se il login è giusto
+        session["username"] = user
+        return redirect(url_for("home"))
+    else:
+        return render_template("login.html")
 
 
 @app.route('/logout')
 @login_required
 def logout():
-    session.pop('logged_in', None)
+    session.pop("username", None)
     flash('You were just logged out!')
     return redirect(url_for('welcome'))
-
-
-def connect_db():
-    return app.database
 
 
 if __name__ == '__main__':

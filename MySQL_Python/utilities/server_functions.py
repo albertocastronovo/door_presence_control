@@ -23,5 +23,8 @@ def password_verify(password: str, test_hash: str) -> bool:
 
 def get_user_password(database: Database, user: str):
     query = database.select_col_where("user", "password", "username", user)
-    return query[0][0]
+    try:
+        return query[0][0]
+    except IndexError:
+        return None
 
