@@ -11,8 +11,6 @@ import os
 app = Flask(__name__)
 app.secret_key = os.getenv("door_secret")
 
-#your_hashed_pw = password_hash("password2")
-#print(your_hashed_pw)
 
 db = Database(
     host="localhost",
@@ -41,7 +39,7 @@ scheduler.add_job(
     trigger="cron",
     hour=12
 )
-
+scheduler.start()
 
 # login required decorator
 def login_required(f):
@@ -53,6 +51,21 @@ def login_required(f):
             flash('You need to login first.')
             return redirect(url_for('login'))
     return wrap
+
+
+def permissions_required(flag_list):
+    def wrapper_function(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            permissions = session["permissions"]
+            for flag in flag_list:
+                if not permissions.get(flag, False):
+                    flash(f"Invalid permissions for {f.__name__}")
+                    return
+            return f(*args, **kwargs)
+        return wrapper
+    return wrapper_function
+
 
 
 # use decorators to link the function to a URL
@@ -89,6 +102,7 @@ def login():
             return render_template("login.html")
         # qui la roba che succede se il login è giusto
         session["username"] = user
+        session["permissions"] = {"perm1": True}
         return redirect(url_for("home"))
     else:
         return render_template("login.html")
@@ -102,5 +116,18 @@ def logout():
     return redirect(url_for('welcome'))
 
 
+@permissions_required(["perm1", "perm2"])
+def example_2():
+    print("ciao 2")
+
+
+@permissions_required(["perm1"])
+def example_1():
+    print("ciao 1")
+
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    try:
+        app.run(debug=True)
+    finally:
+        scheduler.shutdown()
