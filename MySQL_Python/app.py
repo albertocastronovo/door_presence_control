@@ -4,7 +4,7 @@ from flask import Flask, render_template, url_for, request, redirect, \
 from functools import wraps
 from utilities.server_functions import get_user_password, password_verify, password_hash
 from utilities.database import Database
-
+from apscheduler.schedulers.background import BackgroundScheduler
 import os
 
 # create the application object
@@ -24,6 +24,24 @@ db.connect_as(
     user="root",
     password=""
 )
+
+users_permissions = {}
+
+
+def update_users_permissions():
+    global users_permissions
+    users_permissions = {r["role"]: r for r in db.select_all("roles")}
+
+
+update_users_permissions()
+
+scheduler = BackgroundScheduler()
+scheduler.add_job(
+    func=update_users_permissions,
+    trigger="cron",
+    hour=12
+)
+
 
 # login required decorator
 def login_required(f):
