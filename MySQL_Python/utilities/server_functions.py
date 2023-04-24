@@ -1,6 +1,9 @@
 from argon2 import hash_password, verify_password
 from argon2.exceptions import VerifyMismatchError
 from MySQL_Python.utilities.database import Database
+from re import compile, match
+
+password_validator = compile(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,32}$")
 
 
 def password_hash(password: str) -> str:
@@ -21,10 +24,14 @@ def password_verify(password: str, test_hash: str) -> bool:
         return False
 
 
-def get_user_password(database: Database, user: str):
+def get_user_password(database: Database, user: str) -> str | None:
     query = database.select_col_where("user", "password", "username", user)
     try:
         return query[0]["password"]
     except IndexError:
         return None
+
+
+def is_password_secure(test_password: str) -> bool:
+    return match(password_validator, test_password) is not None
 
