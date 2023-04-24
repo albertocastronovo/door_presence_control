@@ -103,6 +103,8 @@ def login():
         # qui la roba che succede se il login è giusto
         session["username"] = user
         session["permissions"] = {"perm1": True}
+        example_1()
+        example_2()
         return redirect(url_for("home"))
     else:
         return render_template("login.html")
