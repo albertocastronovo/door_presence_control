@@ -1,6 +1,6 @@
 from argon2 import hash_password, verify_password
 from argon2.exceptions import VerifyMismatchError
-from database import Database
+from MySQL_Python.utilities.database import Database
 
 
 def password_hash(password: str) -> str:

@@ -1,17 +1,18 @@
 # Import the Flask class and other extensions from the flask module
 from flask import Flask, render_template, url_for, request, redirect, \
-    session, flash, g
+    session, flash
 from functools import wraps
-from utilities.database import Database
 from utilities.server_functions import get_user_password, password_verify, password_hash
+from utilities.database import Database
+
 import os
 
 # create the application object
 app = Flask(__name__)
-app.secret_key = os.environ.get("door_secret")
+app.secret_key = os.getenv("door_secret")
 
-your_hashed_pw = password_hash("password2")
-print(your_hashed_pw)
+#your_hashed_pw = password_hash("password2")
+#print(your_hashed_pw)
 
 db = Database(
     host="localhost",
