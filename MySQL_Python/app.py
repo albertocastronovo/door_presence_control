@@ -61,7 +61,7 @@ def login_required(f):
 def home():  # g is used in flask to store a temporary object or request ---> db connection
 
     query = db.select_all("user")
-    posts = [dict(id=row[0], name=row[1], surname=row[2]) for row in query]
+    posts = [dict(id=row["id"], name=row["name"], surname=row["surname"]) for row in query]
     return render_template('index.html', posts=posts)  # render a template
 
 

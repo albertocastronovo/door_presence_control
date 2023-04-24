@@ -32,7 +32,7 @@ class Database:
                     port=self.__port
                 )
                 self.__connection = new_connection
-                self.__cursor = self.__connection.cursor(buffered=True)
+                self.__cursor = self.__connection.cursor(buffered=True, dictionary=True)
                 return 0
             except con.Error as err:
                 if err.errno == ec.ER_ACCESS_DENIED_ERROR:  # the user has no access permissions
