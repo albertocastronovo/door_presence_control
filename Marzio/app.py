@@ -48,7 +48,7 @@ def home():  # g is used in flask to store a temporary object or request ---> db
 
     query = db.select_all("user")
     posts = [dict(id=row[0], name=row[1], surname=row[2]) for row in query]
-    return render_template('index.html', posts=posts)  # render a template
+    return render_template('home.html', posts=posts)  # render a template
 
 
 @app.route('/welcome')

@@ -14,7 +14,9 @@ def password_hash(password: str) -> str:
     return hash_bytes.decode("utf-8")
 
 
-def password_verify(password: str, test_hash: str) -> bool:
+def password_verify(password: str, test_hash: str | None) -> bool:
+    if test_hash is None:
+        return False
     try:
         return verify_password(
             password=bytes(password, "utf-8"),
@@ -26,6 +28,7 @@ def password_verify(password: str, test_hash: str) -> bool:
 
 def get_user_password(database: Database, user: str) -> str | None:
     query = database.select_col_where("user", "password", "username", user)
+    print(query)
     try:
         return query[0]["password"]
     except IndexError:

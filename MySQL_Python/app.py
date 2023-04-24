@@ -11,6 +11,8 @@ import os
 app = Flask(__name__)
 app.secret_key = os.getenv("door_secret")
 
+# your_hashed_pw = password_hash("password3")
+# print(your_hashed_pw)
 
 db = Database(
     host="localhost",
@@ -39,7 +41,7 @@ scheduler.add_job(
     trigger="cron",
     hour=12
 )
-scheduler.start()
+
 
 # login required decorator
 def login_required(f):
@@ -50,32 +52,17 @@ def login_required(f):
         else:
             flash('You need to login first.')
             return redirect(url_for('login'))
+
     return wrap
-
-
-def permissions_required(flag_list):
-    def wrapper_function(f):
-        @wraps(f)
-        def wrapper(*args, **kwargs):
-            permissions = session["permissions"]
-            for flag in flag_list:
-                if not permissions.get(flag, False):
-                    flash(f"Invalid permissions for {f.__name__}")
-                    return
-            return f(*args, **kwargs)
-        return wrapper
-    return wrapper_function
-
 
 
 # use decorators to link the function to a URL
 @app.route('/')
 @login_required
-def home():  # g is used in flask to store a temporary object or request ---> db connection
-
+def home():
     query = db.select_all("user")
     posts = [dict(id=row["userID"], name=row["name"], surname=row["surname"]) for row in query]
-    return render_template('index.html', posts=posts)  # render a template
+    return render_template('home.html', posts=posts)  # render a template
 
 
 @app.route('/welcome')
@@ -83,9 +70,28 @@ def welcome():
     return render_template("welcome.html")  # render a template
 
 
+@app.route('/signup', methods=['GET', 'POST'])
+def signup():
+    print(request.method)
+    if request.method == 'POST':
+        user = request.form["username"]
+        saved_hash = get_user_password(db, user)
+        user_pw = request.form["password"]
+        is_correct = password_verify(user_pw, saved_hash)
+        if not is_correct or saved_hash is None:
+            flash("The selected employee does not have those access permissions.")
+            return render_template("signup.html")
+        # qui la roba che succede se il login è giusto
+        # session["username"] = user
+        # return redirect(url_for("home"))
+        flash("more fields to write")
+        return render_template("signup.html")
+
+    else:
+        return render_template("signup.html")
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-
     if request.method == 'POST':
         user = request.form["username"]
         # gestire errori se il form è incompleto (non c'è l'utente, la password...)
@@ -102,9 +108,6 @@ def login():
             return render_template("login.html")
         # qui la roba che succede se il login è giusto
         session["username"] = user
-        session["permissions"] = {"perm1": True}
-        example_1()
-        example_2()
         return redirect(url_for("home"))
     else:
         return render_template("login.html")
@@ -118,18 +121,5 @@ def logout():
     return redirect(url_for('welcome'))
 
 
-@permissions_required(["perm1", "perm2"])
-def example_2():
-    print("ciao 2")
-
-
-@permissions_required(["perm1"])
-def example_1():
-    print("ciao 1")
-
-
 if __name__ == '__main__':
-    try:
-        app.run(debug=True)
-    finally:
-        scheduler.shutdown()
+    app.run(debug=True)

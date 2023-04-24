@@ -80,6 +80,9 @@ class Database:
         query = f"SELECT * FROM {table}"
         return self.__execute_query(query)
 
+    def description(self):
+        return self.__cursor.description
+
     def select_where(
             self,
             table: str,
