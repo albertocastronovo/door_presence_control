@@ -39,8 +39,9 @@ scheduler = BackgroundScheduler()
 scheduler.add_job(
     func=update_users_permissions,
     trigger="cron",
-    hour=12
+    hour=3
 )
+scheduler.start()
 
 
 # login required decorator
@@ -54,6 +55,20 @@ def login_required(f):
             return redirect(url_for('login'))
 
     return wrap
+
+def permissions_required(flag_list):
+    def wrapper_function(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            permissions = session["permissions"]
+            for flag in flag_list:
+                print(f"flag: {flag}")
+                if not permissions.get(flag, False):
+                    print(f"invalid flag: {flag}")
+                    return
+            return f(*args, **kwargs)
+        return wrapper
+    return wrapper_function
 
 
 # use decorators to link the function to a URL
@@ -81,9 +96,7 @@ def signup():
         if not is_correct or saved_hash is None:
             flash("The selected employee does not have those access permissions.")
             return render_template("signup.html")
-        # qui la roba che succede se il login è giusto
-        # session["username"] = user
-        # return redirect(url_for("home"))
+        session["username"] = user
         flash("more fields to write")
         return render_template("signup.html")
 
@@ -108,6 +121,7 @@ def login():
             return render_template("login.html")
         # qui la roba che succede se il login è giusto
         session["username"] = user
+        session["permissions"] = {"perm1": True}
         return redirect(url_for("home"))
     else:
         return render_template("login.html")
@@ -122,4 +136,7 @@ def logout():
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    try:
+        app.run(debug=True)
+    finally:
+        scheduler.shutdown()
