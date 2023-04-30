@@ -1,4 +1,4 @@
-<html>
+<html lang="eng">
   <head>
     <title>DCS Sign up page</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,12 +10,25 @@
       <br>
       <h5>Type in your fiscal code and your temporary password.</h5>
       <br>
-      <form action="" method="post">
+      <form id = "auth-form" action="" method="post">
         <input type="text" placeholder="Fiscal Code" name="username" value="{{
           request.form.username }}">
         <input type="password" placeholder="Temp. Password" name="password" value="{{
           request.form.password }}">
         <input class="btn btn-default" type="submit" value="Enter">
+      </form>
+      <form id="details-form" action="/update_user" method="post" style="display: none;">
+        <!-- Additional form fields go here -->
+        <label>Username:</label>
+        <input type="text" placeholder="Username" name="username">
+        <br>
+        <label>Phone number:</label>
+        <input type="text" placeholder="Phone Number" name="phone_number">
+        <br>
+        <label>E-mail:</label>
+        <input type="text" placeholder="E-mail" name="email">
+        <br>
+        <input class="btn btn-default" type="submit" value="Submit">
       </form>
       {% if error %}
         <p class="error"><strong>Error:</strong> {{ error }}</p>
@@ -23,6 +36,30 @@
       {% for message in get_flashed_messages() %}
         {{message}}
       {% endfor %}
-    </div>
+      </div>
+      <script>
+        document.getElementById('auth-form').addEventListener('submit', function(event) {
+        event.preventDefault();
+
+        // Fetch data from the form
+        const formData = new FormData(event.target);
+        const username = formData.get('username');
+        const password = formData.get('password');
+
+        // Perform an AJAX request to check the user's credentials
+        fetch('/check_auth', {
+          method: 'POST',
+          body: formData,
+        }).then(function(response) {
+          if (response.ok) {
+            // Unhide the new form if the authentication was successful
+            document.getElementById('details-form').style.display = 'block';
+          } else {
+            // Handle unsuccessful authentication
+            alert('Invalid username or password');
+          }
+        });
+        });
+      </script>
   </body>
 </html>

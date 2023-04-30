@@ -1,6 +1,6 @@
 # Import the Flask class and other extensions from the flask module
 from flask import Flask, render_template, url_for, request, redirect, \
-    session, flash
+    session, flash, jsonify
 from functools import wraps
 from utilities.server_functions import get_user_password, password_verify, password_hash
 from utilities.database import Database
@@ -56,6 +56,7 @@ def login_required(f):
 
     return wrap
 
+
 def permissions_required(flag_list):
     def wrapper_function(f):
         @wraps(f)
@@ -67,7 +68,9 @@ def permissions_required(flag_list):
                     print(f"invalid flag: {flag}")
                     return
             return f(*args, **kwargs)
+
         return wrapper
+
     return wrapper_function
 
 
@@ -87,7 +90,7 @@ def welcome():
 
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
-    print(request.method)
+    # print(request.method)
     if request.method == 'POST':
         user = request.form["username"]
         saved_hash = get_user_password(db, user)
@@ -99,9 +102,34 @@ def signup():
         session["username"] = user
         flash("more fields to write")
         return render_template("signup.html")
-
     else:
         return render_template("signup.html")
+
+
+@app.route('/check_auth', methods=['POST'])
+def check_auth():
+    user = request.form["username"]
+    saved_hash = get_user_password(db, user)
+    user_pw = request.form["password"]
+    is_correct = password_verify(user_pw, saved_hash)
+    if not is_correct or saved_hash is None:
+        return jsonify({"error": "The selected employee does not have those access permissions."}), 401
+    session["username"] = user
+    return jsonify({"message": "Authenticated successfully"})
+
+
+@app.route('/update_user', methods=['POST'])
+def update_user():
+    username = request.form["username"]
+    phone_number = request.form["phone_number"]
+    email = request.form["email"]
+
+    # Update the user's information in the database
+    # ...
+
+    flash("User information updated successfully! ")
+    return redirect(url_for("home"))
+
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
