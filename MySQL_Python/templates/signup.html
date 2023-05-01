@@ -21,8 +21,8 @@
         <!-- Additional form fields go here -->
         <br /><p>Fill in all fields to complete the registration:</p><br />
         <input type="text" placeholder="Username" name="username" required>
-        <input type="text" placeholder="Phone Number" name="phone_number" required><br />
-        <input type="text" placeholder="E-mail" id="email" name="email" required>
+        <input type="tel" placeholder="Phone Number" id="phone" name="phone_number" required><br />
+        <input type="email" placeholder="E-mail" id="email" name="email" required>
         <input type="text" placeholder="Address" name="address" required><br />
         <input type="date" placeholder="Birth date" id="date" name="birth_date" required max="2006-01-01">
         <label for="gender">Gender</label>
@@ -33,8 +33,8 @@
         </select><br /><br/>
         <p>Choose your new password. The new password must be 8 to 16 characters long and contain at least<br>
           one uppercase letter, one lowercase letter, one number, and one special character.</p><br/>
-        <input type="text" placeholder="New Password" name="new_password" required><br/>
-        <input type="text" placeholder="Repeat the new password" name="repeat" required><br/>
+        <input type="password" placeholder="New Password" name="new_password" required><br/>
+        <input type="password" placeholder="Repeat the new password" name="repeat" required><br/>
         <input class="btn btn-default" type="reset" value="Reset">
         <input class="btn btn-default" type="submit" value="Submit">
       </form>
