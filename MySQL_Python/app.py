@@ -123,12 +123,29 @@ def update_user():
     username = request.form["username"]
     phone_number = request.form["phone_number"]
     email = request.form["email"]
+    address = request.form["address"]
+    birth_date = request.form["birth_date"]
+    gender = request.form["gender"]
+    new_password = request.form["new_password"]
+    repeat = request.form["repeat"]
 
-    # Update the user's information in the database
-    # ...
+    if new_password != repeat:
 
-    flash("User information updated successfully! ")
-    return redirect(url_for("home"))
+        flash("Error in retyping the new password")
+        return redirect(url_for("signup"))
+
+    elif username == "altri username già registrati nel DB":
+        #
+        pass
+
+    else:
+
+        # Update the user's information in the database
+        # ...
+
+        flash("User information updated successfully! ")
+        return redirect(url_for("home"))
+
 
 
 @app.route('/login', methods=['GET', 'POST'])
