@@ -141,7 +141,6 @@ def update_user():
     else:
 
         # Update the user's information in the database
-        # ...
 
         flash("User information updated successfully! ")
         return redirect(url_for("home"))
