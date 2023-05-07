@@ -21,6 +21,7 @@
         <!-- Additional form fields go here -->
         <br /><p>Fill in all fields to complete the registration:</p><br />
         <input type="text" placeholder="Username" name="username" required>
+        <input type="tel" id="prefix" name="prefix" placeholder="Prefix (f.i. +39)" pattern="+[0-9]{3}" required>
         <input type="tel" placeholder="Phone Number" id="phone" name="phone_number" required><br />
         <input type="email" placeholder="E-mail" id="email" name="email" required>
         <input type="text" placeholder="Address" name="address" required><br />
@@ -47,26 +48,73 @@
       </div>
       <script>
         document.getElementById('auth-form').addEventListener('submit', function(event) {
-        event.preventDefault();
+          event.preventDefault();
 
-        // Fetch data from the form
-        const formData = new FormData(event.target);
-        const username = formData.get('username');
-        const password = formData.get('password');
+          // Fetch data from the form
+          const formData = new FormData(event.target);
 
-        // Perform an AJAX request to check the user's credentials
-        fetch('/check_auth', {
-          method: 'POST',
-          body: formData,
-        }).then(function(response) {
-          if (response.ok) {
-            // Unhide the new form if the authentication was successful
-            document.getElementById('details-form').style.display = 'block';
-          } else {
-            // Handle unsuccessful authentication
-            alert('Invalid username or password');
-          }
+          // Perform an AJAX request to check the user's credentials
+          fetch('/check_auth', {
+            method: 'POST',
+            body: formData,
+          }).then(function(response) {
+            if (response.ok) {
+              // Unhide the new form if the authentication was successful
+              document.getElementById('details-form').style.display = 'block';
+            } else {
+              // Handle unsuccessful authentication
+              alert('Invalid username or password');
+            }
+          });
         });
+
+        
+        document.getElementById('details-form').addEventListener('submit', function(event) {
+          event.preventDefault();
+
+          // Fetch data from the form
+          const formData = new FormData(event.target);
+          const newPassword = formData.get('new_password');
+          const repeatPassword = formData.get('repeat');
+
+
+          // Check if the password is strong enough
+          const passwordPattern = /^(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*()_+])(?=.*[a-zA-Z]).{8,16}$/;
+          if (!passwordPattern.test(newPassword)) {
+            alert('Your password must be 8 to 16 characters long and contain at least one uppercase letter, ' +
+                    'one lowercase letter, one number, and one special character (!@#$%^&*()_+)');
+            document.getElementsByName('new_password')[0].value = '';
+            document.getElementsByName('repeat')[0].value = '';
+            document.getElementsByName('new_password')[0].focus();
+            return false;
+
+          }
+
+          // Check if the password and confirmation match
+          if (newPassword !== repeatPassword) {
+            alert('The new password and confirmation do not match');
+            document.getElementsByName('new_password')[0].value = '';
+            document.getElementsByName('repeat')[0].value = '';
+            document.getElementsByName('new_password')[0].focus();
+            return false;
+          }
+
+          // Perform an AJAX request to update the user's details
+          fetch('/update_user', {
+            method: 'POST',
+            body: formData,
+          }).then(function (response) {
+            return response.json();
+          }).then(function (data) {
+            if (data.status === 'success') {
+              // Handle successful update
+              alert(data.message);
+              window.location.href = '/';
+            } else {
+              // Handle unsuccessful update
+              alert('There was an error updating the user details');
+            }
+          });
         });
       </script>
   </body>

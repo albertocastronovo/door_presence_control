@@ -121,30 +121,36 @@ def check_auth():
 @app.route('/update_user', methods=['POST'])
 def update_user():
     username = request.form["username"]
+    prefix = request.form["prefix"]
     phone_number = request.form["phone_number"]
     email = request.form["email"]
     address = request.form["address"]
     birth_date = request.form["birth_date"]
     gender = request.form["gender"]
     new_password = request.form["new_password"]
-    repeat = request.form["repeat"]
 
-    if new_password != repeat:
+    print(username)
+    print(new_password)
+    print(prefix + phone_number)
+    print(email)
+    print(address)
+    print(birth_date)
+    print(gender)
 
-        flash("Error in retyping the new password")
-        return redirect(url_for("signup"))
+    # Update the user's information in the database
+    # Check if there is another person with the same username --> check_username()
 
-    elif username == "altri username già registrati nel DB":
-        #
-        pass
+    return jsonify({"status": "success", "message": "User information updated successfully!"})
 
-    else:
 
-        # Update the user's information in the database
-
-        flash("User information updated successfully! ")
-        return redirect(url_for("home"))
-
+# --> here
+@app.route('/check_username', methods=['POST'])
+def check_username():
+    username = request.form["username"]
+    saved_hash = get_user_password(db, username)
+    if saved_hash is not None:
+        return jsonify({"exists": True})
+    return jsonify({"exists": False})
 
 
 @app.route('/login', methods=['GET', 'POST'])
