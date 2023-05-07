@@ -2,8 +2,26 @@ from argon2 import hash_password, verify_password
 from argon2.exceptions import VerifyMismatchError
 from MySQL_Python.utilities.database import Database
 from re import compile, match
+from string import ascii_uppercase, ascii_lowercase, digits
+from secrets import choice
+from random import SystemRandom as sr
 
 password_validator = compile(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,32}$")
+
+
+def random_secure_password(length: int = 16):
+    n_upper = sr().randint(1, length-5)
+    n_lower = sr().randint(1, length-4-n_upper)
+    n_numbers = sr().randint(1, length-3-n_upper-n_lower)
+    n_symbols = length-n_upper-n_lower-n_numbers
+
+    password_list = \
+        [choice(ascii_uppercase) for _ in range(n_upper)] +\
+        [choice(ascii_lowercase) for _ in range(n_lower)] +\
+        [choice(digits) for _ in range(n_numbers)] +\
+        [choice("@$!%*?&") for _ in range(n_symbols)]
+    sr().shuffle(password_list)
+    return "".join(password_list)
 
 
 def password_hash(password: str) -> str:

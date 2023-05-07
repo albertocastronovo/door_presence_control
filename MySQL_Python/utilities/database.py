@@ -113,6 +113,21 @@ class Database:
         query = f"UPDATE {table} SET {set_column} = %s WHERE {where_column} = %s"
         return self.__execute_query(query, (set_value, where_value))
 
+    def update_multiple(
+            self,
+            table: str,
+            column_names: list[str],
+            column_values: list,
+            where_column: str,
+            where_value
+                ):
+        column_assignments = ", ".join([f"{key} = %s" for key in column_names])
+        query = f"UPDATE {table} SET {column_assignments} WHERE {where_column} = %s"
+        param_tuple_1 = tuple(column_values)
+        param_tuple_2 = (where_value,)
+        param_tuple = param_tuple_1 + param_tuple_2
+        return self.__execute_query(query, param_tuple)
+
     def delete(
             self,
             table: str,

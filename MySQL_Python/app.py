@@ -185,6 +185,20 @@ def logout():
     return redirect(url_for('welcome'))
 
 
+@permissions_required(["CO", "CA", "SA"])
+def create_temp_user(
+        user_role: str = "USR",
+        rfid_number: int = 0,
+        set_password: str | None = None
+):
+    # se l'utente non esiste proprio, crealo nuovo con codice fiscale dato e pw temporanea (rfid associata?)
+    pass
+
+    # se esiste già ma non nell'azienda, dagli il ruolo x nell'azienda
+
+    # se esiste già nell'azienda, sovrascrivi il suo ruolo se il tuo è >= il suo precedente e quello nuovo
+
+
 if __name__ == '__main__':
     try:
         app.run(debug=True)
