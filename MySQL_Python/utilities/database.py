@@ -111,7 +111,11 @@ class Database:
             where_value
                 ):
         query = f"UPDATE {table} SET {set_column} = %s WHERE {where_column} = %s"
-        return self.__execute_query(query, (set_value, where_value))
+        try:
+            self.__execute_query(query, (set_value, where_value))
+            return 0
+        except:
+            return -1
 
     def update_multiple(
             self,
@@ -125,8 +129,14 @@ class Database:
         query = f"UPDATE {table} SET {column_assignments} WHERE {where_column} = %s"
         param_tuple_1 = tuple(column_values)
         param_tuple_2 = (where_value,)
+        #print(f"{param_tuple_1} {param_tuple_2}")
         param_tuple = param_tuple_1 + param_tuple_2
-        return self.__execute_query(query, param_tuple)
+        print(f"{query}")
+        try:
+            self.__execute_query(query, param_tuple)
+            return 0
+        except:
+            return -1
 
     def delete(
             self,
