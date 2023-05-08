@@ -138,7 +138,13 @@ def update_user():
     print(birth_date)
     print(gender)
 
-    # Update the user's information in the database
+    update = db.update_multiple(
+        table="user",
+        column_names=["username", "password", "phone_number", "mail", "address", "birth_date", "gender"],
+        column_values=[username, password_hash(new_password), prefix+phone_number, email, address, birth_date, gender],
+        where_column="fiscal_code",
+        where_value=session["username"]
+    )
     # Check if there is another person with the same username --> check_username()
 
     return jsonify({"status": "success", "message": "User information updated successfully!"})
