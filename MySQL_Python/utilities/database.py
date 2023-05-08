@@ -69,12 +69,18 @@ class Database:
     def insert(
             self,
             table: str,
+            columns: tuple[str, ...],
             values: tuple
                ):
+        columns_str = ", ".join(["%s" for _ in range(len(columns))])
         parameters = ", ".join(["%s" for _ in range(len(values))])
         print(parameters)
-        query = f"INSERT INTO {table} VALUES ({parameters})"
-        return self.__execute_query(query, values)
+        query = f"INSERT INTO {table} ({columns_str}) VALUES ({parameters})"
+        try:
+            self.__execute_query(query, values)
+            return 0
+        except:
+            return -1
 
     def select_all(self, table: str):
         query = f"SELECT * FROM {table}"
@@ -91,6 +97,18 @@ class Database:
                     ):
         query = f"SELECT * FROM {table} WHERE {column} = %s"
         return self.__execute_query(query, (value,))
+
+    def select_wheres(
+            self,
+            table: str,
+            column_1: str,
+            value_1,
+            column_2: str,
+            value_2,
+            mode: str = "AND"
+                    ):
+        query = f"SELECT * FROM {table} WHERE {column_1} = %s {mode} {column_2} = %s"
+        return self.__execute_query(query, (value_1, value_2))
 
     def select_col_where(
             self,
@@ -129,9 +147,7 @@ class Database:
         query = f"UPDATE {table} SET {column_assignments} WHERE {where_column} = %s"
         param_tuple_1 = tuple(column_values)
         param_tuple_2 = (where_value,)
-        #print(f"{param_tuple_1} {param_tuple_2}")
         param_tuple = param_tuple_1 + param_tuple_2
-        print(f"{query}")
         try:
             self.__execute_query(query, param_tuple)
             return 0
@@ -145,4 +161,8 @@ class Database:
             value
                 ):
         query = f"DELETE FROM {table} WHERE {column} = %s"
-        return self.__execute_query(query, (value,))
+        try:
+            self.__execute_query(query, (value,))
+            return 0
+        except:
+            return -1

@@ -2,7 +2,7 @@
 from flask import Flask, render_template, url_for, request, redirect, \
     session, flash, jsonify
 from functools import wraps
-from utilities.server_functions import get_user_password, password_verify, password_hash
+from utilities.server_functions import get_user_password, password_verify, password_hash, random_secure_password
 from utilities.database import Database
 from apscheduler.schedulers.background import BackgroundScheduler
 import os
@@ -187,14 +187,36 @@ def logout():
 
 @permissions_required(["CO", "CA", "SA"])
 def create_temp_user(
+        user_context: str = "default",
+        user_fiscal_code: str = "default",
         user_role: str = "USR",
         rfid_number: int = 0,
         set_password: str | None = None
 ):
     # se l'utente non esiste proprio, crealo nuovo con codice fiscale dato e pw temporanea (rfid associata?)
-    pass
+    user_fetch = db.select_where(
+        table="user",
+        column="fiscal_code",
+        value=user_fiscal_code
+    )
+
+    if len(user_fetch) < 1:     # se l'utente non esiste proprio
+        password = set_password if set_password is not None else random_secure_password()
+        db.insert(
+            table="user",
+            columns=("username", "password", "fiscal_code", "RFID_key"),
+            values=(user_fiscal_code, password_hash(password), user_fiscal_code, rfid_number)
+        )
 
     # se esiste già ma non nell'azienda, dagli il ruolo x nell'azienda
+    user_role_in_company = db.select_wheres(
+        table="user_to_customer",
+        column_1="cusID",
+        value_1=user_context,
+        column_2="userID",
+        value_2=user_fiscal_code
+    )
+    pass
 
     # se esiste già nell'azienda, sovrascrivi il suo ruolo se il tuo è >= il suo precedente e quello nuovo
 

@@ -5,6 +5,7 @@ from re import compile, match
 from string import ascii_uppercase, ascii_lowercase, digits
 from secrets import choice
 from random import SystemRandom as sr
+from datetime import datetime
 
 password_validator = compile(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,32}$")
 
@@ -55,6 +56,20 @@ def get_user_password(database: Database, user: str) -> str | None:
 
 def is_password_secure(test_password: str) -> bool:
     return match(password_validator, test_password) is not None
+
+
+def is_time_valid(
+        time_1: str,
+        time_2: str,
+        to_check: str | None = None
+                ) -> bool:
+    time_1_dt = datetime.strptime(time_1, "%y-%m-%d %H:%M:%S")
+    time_2_dt = datetime.strptime(time_2, "%y-%m-%d %H:%M:%S")
+    if to_check is None:
+        to_check_dt = datetime.now()
+    else:
+        to_check_dt = datetime.strptime(to_check, "%y-%m-%d %H:%M:%S")
+    return time_1_dt <= to_check_dt <= time_2_dt
 
 
 class User:
