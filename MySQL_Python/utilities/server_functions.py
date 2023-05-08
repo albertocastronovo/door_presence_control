@@ -25,6 +25,10 @@ def random_secure_password(length: int = 16):
     return "".join(password_list)
 
 
+def date_to_str(date: datetime):
+    return date.strftime("%y-%m-%d %H:%M:%S")
+
+
 def password_hash(password: str) -> str:
     hash_bytes = hash_password(
         bytes(password, "utf-8"),
@@ -50,6 +54,22 @@ def get_user_password(database: Database, user: str) -> str | None:
     print(query)
     try:
         return query[0]["password"]
+    except IndexError:
+        return None
+
+
+def get_id_from_user(database: Database, user: str) -> str | None:
+    query = database.select_col_where("user", "fiscal_code", "username", user)
+    try:
+        return query[0]["fiscal_code"]
+    except IndexError:
+        return None
+
+
+def get_role_from_ids(database: Database, user: str, company: str) -> str | None:
+    query = database.select_wheres("user_to_customer", "cusID", company, "userID", user)
+    try:
+        return query[0]["role"]
     except IndexError:
         return None
 

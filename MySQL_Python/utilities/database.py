@@ -154,6 +154,28 @@ class Database:
         except:
             return -1
 
+    def update_multiple_wheres(
+            self,
+            table: str,
+            column_names: list[str],
+            column_values: list,
+            where_col_1: str,
+            where_val_1,
+            where_col_2: str,
+            where_val_2,
+            mode: str = "AND"
+                ):
+        column_assignments = ", ".join([f"{key} = %s" for key in column_names])
+        query = f"UPDATE {table} SET {column_assignments} WHERE {where_col_1} = %s {mode} {where_col_2} = %s"
+        param_tuple_1 = tuple(column_values)
+        param_tuple_2 = (where_val_1, where_val_2)
+        param_tuple = param_tuple_1 + param_tuple_2
+        try:
+            self.__execute_query(query, param_tuple)
+            return 0
+        except:
+            return -1
+
     def delete(
             self,
             table: str,

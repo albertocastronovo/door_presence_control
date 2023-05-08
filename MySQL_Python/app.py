@@ -2,10 +2,11 @@
 from flask import Flask, render_template, url_for, request, redirect, \
     session, flash, jsonify
 from functools import wraps
-from utilities.server_functions import get_user_password, password_verify, password_hash, random_secure_password
+from utilities.server_functions import *
 from utilities.database import Database
 from apscheduler.schedulers.background import BackgroundScheduler
 import os
+from datetime import datetime, timedelta
 
 # create the application object
 app = Flask(__name__)
@@ -171,7 +172,6 @@ def login():
             return render_template("login.html")
         # qui la roba che succede se il login è giusto
         session["username"] = user
-        session["permissions"] = {"perm1": True}
         return redirect(url_for("home"))
     else:
         return render_template("login.html")
@@ -192,8 +192,14 @@ def create_temp_user(
         user_role: str = "USR",
         rfid_number: int = 0,
         set_password: str | None = None
-):
-    # se l'utente non esiste proprio, crealo nuovo con codice fiscale dato e pw temporanea (rfid associata?)
+                    ):
+
+    caller_role = get_role_from_ids(db, get_id_from_user(db, session["username"]), user_context)
+    if caller_role == "USR" or \
+        (caller_role == "CO" and user_role != "USR") or \
+            (caller_role == "CA" and user_role not in ["USR", "CO"]):
+        return -1   # no permissions to make the operation
+
     user_fetch = db.select_where(
         table="user",
         column="fiscal_code",
@@ -202,13 +208,12 @@ def create_temp_user(
 
     if len(user_fetch) < 1:     # se l'utente non esiste proprio
         password = set_password if set_password is not None else random_secure_password()
-        db.insert(
+        db.insert(              # viene creato un utente nuovo, con password temporanea e RFID data
             table="user",
             columns=("username", "password", "fiscal_code", "RFID_key"),
             values=(user_fiscal_code, password_hash(password), user_fiscal_code, rfid_number)
         )
 
-    # se esiste già ma non nell'azienda, dagli il ruolo x nell'azienda
     user_role_in_company = db.select_wheres(
         table="user_to_customer",
         column_1="cusID",
@@ -216,9 +221,28 @@ def create_temp_user(
         column_2="userID",
         value_2=user_fiscal_code
     )
-    pass
+    # se esiste già ma non nell'azienda, dagli il ruolo x nell'azienda
+    today = datetime.now()
+    tomorrow = today + timedelta(days=1)
 
-    # se esiste già nell'azienda, sovrascrivi il suo ruolo se il tuo è >= il suo precedente e quello nuovo
+    if len(user_role_in_company) < 1:
+
+        db.insert(
+            table="user_to_customer",
+            columns=("cusID", "userID", "role", "time_in", "time_out"),
+            values=(user_context, user_fiscal_code, user_role, date_to_str(today), date_to_str(tomorrow))
+        )
+    else:
+        db.update_multiple_wheres(
+            table="user_to_customer",
+            column_names=["role", "time_out"],
+            column_values=[user_role, date_to_str(tomorrow)],
+            where_col_1="cusID",
+            where_val_1=user_context,
+            where_col_2="userID",
+            where_val_2=user_fiscal_code
+        )
+    return 0
 
 
 if __name__ == '__main__':

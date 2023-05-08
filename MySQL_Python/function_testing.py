@@ -2,14 +2,14 @@ from utilities.database import Database
 from utilities.server_functions import password_hash
 
 db = Database(
-    host="192.168.24.156",
+    host="localhost",
     database="door_cntrl_system",
     port=3306
 )
 
 print(db.connect_as(
     user="root",
-    password="root"
+    password=""
 ))
 
 db.update(
