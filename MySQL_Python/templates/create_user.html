@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Form Example</title>
+</head>
+<body>
+	<h1>Insert your data</h1>
+	<form method="POST">
+		<label for="vat_number">VAT number:</label>
+		<input type="text" id="vat_number" name="vat_number"><br>
+
+		<label for="id_number">ID number:</label>
+		<input type="text" id="id_number" name="id_number"><br>
+
+		<label for="user_role">User role:</label>
+		<select id="user_role" name="user_role">
+			<option value="USR">USR</option>
+			<option value="CO">CO</option>
+			<option value="CA">CA</option>
+			<option value="SA">SA</option>
+		</select><br>
+
+		<label for="rfid_number">RFID number:</label>
+		<input type="text" id="rfid_number" name="rfid_number"><br>
+
+		<label for="password">Password:</label>
+		<input type="password" id="password" name="password"><br>
+
+		<input type="submit" value="Submit">
+	</form>
+</body>
+</html>

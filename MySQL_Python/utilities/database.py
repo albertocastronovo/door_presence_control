@@ -72,7 +72,7 @@ class Database:
             columns: tuple[str, ...],
             values: tuple
                ):
-        columns_str = ", ".join(["%s" for _ in range(len(columns))])
+        columns_str = ", ".join(columns)
         parameters = ", ".join(["%s" for _ in range(len(values))])
         print(parameters)
         query = f"INSERT INTO {table} ({columns_str}) VALUES ({parameters})"

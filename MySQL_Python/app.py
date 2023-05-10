@@ -1,4 +1,6 @@
 # Import the Flask class and other extensions from the flask module
+import this
+
 from flask import Flask, render_template, url_for, request, redirect, \
     session, flash, jsonify
 from functools import wraps
@@ -35,7 +37,6 @@ def update_users_permissions():
 
 
 update_users_permissions()
-
 scheduler = BackgroundScheduler()
 scheduler.add_job(
     func=update_users_permissions,
@@ -191,20 +192,20 @@ def logout():
     return redirect(url_for('welcome'))
 
 
-@permissions_required(["CO", "CA", "SA"])
+#@permissions_required(["CO", "CA", "SA"])
 def create_temp_user(
-        user_context: str = "default",
-        user_fiscal_code: str = "default",
+        user_context: str = "IT98803960651",
+        user_fiscal_code: str = "CSTLRT98",
         user_role: str = "USR",
-        rfid_number: int = 0,
-        set_password: str | None = None
+        rfid_number: int = 42,
+        set_password: str | None = "Paolo1!"
                     ):
 
     caller_role = get_role_from_ids(db, get_id_from_user(db, session["username"]), user_context)
     if caller_role == "USR" or \
         (caller_role == "CO" and user_role != "USR") or \
             (caller_role == "CA" and user_role not in ["USR", "CO"]):
-        return -1   # no permissions to make the operation
+        return "no permissions"   # no permissions to make the operation
 
     user_fetch = db.select_where(
         table="user",
@@ -248,7 +249,23 @@ def create_temp_user(
             where_col_2="userID",
             where_val_2=user_fiscal_code
         )
-    return 0
+    return "OK"
+
+
+@app.route("/createuser", methods=["GET", "POST"])
+def create_user():
+    if request.method == "GET":
+        return render_template("create_user.html")
+    else:
+        print("sono qui!!!")
+        is_ok = create_temp_user(
+            user_context=request.form["vat_number"],
+            user_fiscal_code=request.form["id_number"],
+            user_role=request.form["user_role"],
+            rfid_number=int(request.form["rfid_number"]),
+            set_password=request.form["password"]
+        )
+        return is_ok
 
 
 if __name__ == '__main__':
