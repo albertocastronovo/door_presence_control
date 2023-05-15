@@ -8,13 +8,11 @@ from utilities.database import Database
 from apscheduler.schedulers.background import BackgroundScheduler
 import os
 from datetime import datetime, timedelta
+import requests
 
 # create the application object
 app = Flask(__name__)
 app.secret_key = os.getenv("door_secret")
-
-# your_hashed_pw = password_hash("password3")
-# print(your_hashed_pw)
 
 db = Database(
     host="localhost",
@@ -23,8 +21,8 @@ db = Database(
 )
 
 db.connect_as(
-    user="root",
-    password=""
+    user="alberto",
+    password="alberto"
 )
 
 users_permissions = {}
@@ -191,7 +189,40 @@ def logout():
     return redirect(url_for('welcome'))
 
 
-#@permissions_required(["CO", "CA", "SA"])
+@app.route("/door", methods=["POST"])
+def control_door():
+    rfid = request.form["rfid"]
+    door_id = request.form["door_id"]
+
+    door_data = db.select_where("doors", "door_code", door_id)
+    if len(door_data) < 1:
+        return "Door does not exist"
+
+    door_params = door_data[0]
+    is_active = door_params["active"]
+    if not is_active:
+        return "Door not active"
+
+    user = db.select_where("user", "RFID_key", rfid)
+    if len(user) < 1:
+        return "No user associated to given RFID"
+
+    user_id = user[0]["fiscal_code"]
+    company_id = door_params["company_id"]
+    user_in_customer = db.select_wheres("user_to_customer", "cusID", company_id, "userID", user_id)
+    if len(user_in_customer) < 1:
+        return "No user with given ID associated to given company ID"
+
+    time_in = str(user_in_customer[0]["time_in"])
+    time_out = str(user_in_customer[0]["time_out"])
+    if not is_time_valid(time_in, time_out, None):
+        return "The user cannot access right now"
+
+    # inviare al raspberry giusto il comando per aprire la porta se chiusa o chiuderla se aperta
+
+    return "OK"
+
+
 def create_temp_user(
         user_context: str = "IT98803960651",
         user_fiscal_code: str = "CSTLRT98",

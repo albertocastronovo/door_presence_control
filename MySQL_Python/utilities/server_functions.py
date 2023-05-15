@@ -26,7 +26,7 @@ def random_secure_password(length: int = 16):
 
 
 def date_to_str(date: datetime):
-    return date.strftime("%y-%m-%d %H:%M:%S")
+    return date.strftime("%Y-%m-%d %H:%M:%S")
 
 
 def password_hash(password: str) -> str:
@@ -83,12 +83,12 @@ def is_time_valid(
         time_2: str,
         to_check: str | None = None
                 ) -> bool:
-    time_1_dt = datetime.strptime(time_1, "%y-%m-%d %H:%M:%S")
-    time_2_dt = datetime.strptime(time_2, "%y-%m-%d %H:%M:%S")
+    time_1_dt = datetime.strptime(time_1, "%Y-%m-%d %H:%M:%S")
+    time_2_dt = datetime.strptime(time_2, "%Y-%m-%d %H:%M:%S")
     if to_check is None:
         to_check_dt = datetime.now()
     else:
-        to_check_dt = datetime.strptime(to_check, "%y-%m-%d %H:%M:%S")
+        to_check_dt = datetime.strptime(to_check, "%Y-%m-%d %H:%M:%S")
     return time_1_dt <= to_check_dt <= time_2_dt
 
 
