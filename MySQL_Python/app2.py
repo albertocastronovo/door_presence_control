@@ -168,19 +168,16 @@ def login():
         saved_hash = get_user_password(db, user)
         if saved_hash is None:
             # gestire errore se l'utente è sbagliato (non esiste)
-            flash("Wrong username!")
-            return render_template("login.html")
+            return jsonify({"exists": False})
         user_pw = request.form["password"]
         is_correct = password_verify(user_pw, saved_hash)
         if not is_correct:
-            # gestire errore se la password è sbagliata (ma l'utente esiste)
-            flash("Wrong password!")
-            return render_template("login.html")
+            return jsonify({"exists": False})
         # qui la roba che succede se il login è giusto
         session["username"] = user
-        return redirect(url_for("home"))
+        return jsonify({"exists": True})
     else:
-        return render_template("login.html")
+        return jsonify({"exists": False})
 
 
 @app.route('/logout')
