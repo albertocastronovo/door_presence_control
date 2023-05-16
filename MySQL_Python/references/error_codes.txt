@@ -1,6 +1,7 @@
 Client Errors
 
-460
+460: generic failure of the request
+461: the client reached the server with a POST request, but the provided form is missing 1+ required key(s)
 
 
 Server Errors

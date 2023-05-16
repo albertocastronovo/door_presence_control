@@ -1,7 +1,7 @@
 # Import the Flask class and other extensions from the flask module
 
 from flask import Flask, render_template, url_for, request, redirect, \
-    session, flash, jsonify
+    session, flash, jsonify, abort
 from functools import wraps
 from utilities.server_functions import *
 from utilities.database import Database
@@ -13,6 +13,7 @@ import requests
 # create the application object
 app = Flask(__name__)
 app.secret_key = os.getenv("door_secret")
+
 
 db = Database(
     host="localhost",
@@ -191,36 +192,22 @@ def logout():
 
 @app.route("/door", methods=["POST"])
 def control_door():
-    rfid = request.form["rfid"]
-    door_id = request.form["door_id"]
+    rfid = request.form.get("rfid", None)
+    door_id = request.form.get("door_id", None)
+    door_status = request.form.get("door_status", None)
 
-    door_data = db.select_where("doors", "door_code", door_id)
-    if len(door_data) < 1:
-        return "Door does not exist"
+    if rfid is None or door_id is None or door_status is None:
+        abort(461)
 
-    door_params = door_data[0]
-    is_active = door_params["active"]
-    if not is_active:
-        return "Door not active"
+    request_status = validate_rfid_event(
+        db=db,
+        rfid=request.form["rfid"],
+        door_id=request.form["door_id"]
+    )
+    if request_status != 0:
+        abort(460)
 
-    user = db.select_where("user", "RFID_key", rfid)
-    if len(user) < 1:
-        return "No user associated to given RFID"
-
-    user_id = user[0]["fiscal_code"]
-    company_id = door_params["company_id"]
-    user_in_customer = db.select_wheres("user_to_customer", "cusID", company_id, "userID", user_id)
-    if len(user_in_customer) < 1:
-        return "No user with given ID associated to given company ID"
-
-    time_in = str(user_in_customer[0]["time_in"])
-    time_out = str(user_in_customer[0]["time_out"])
-    if not is_time_valid(time_in, time_out, None):
-        return "The user cannot access right now"
-
-    # inviare al raspberry giusto il comando per aprire la porta se chiusa o chiuderla se aperta
-
-    return "OK"
+    return "open" if door_status == "closed" else "close"
 
 
 def create_temp_user(
