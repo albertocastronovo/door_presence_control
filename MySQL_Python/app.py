@@ -3,12 +3,12 @@
 from flask import Flask, render_template, url_for, request, redirect, \
     session, flash, jsonify, abort
 from functools import wraps
-from utilities.server_functions import *
+from utilities.server_functions import get_user_password, password_verify, password_hash, validate_rfid_event, \
+    get_role_from_ids, get_id_from_user, random_secure_password, date_to_str
 from utilities.database import Database
 from apscheduler.schedulers.background import BackgroundScheduler
 import os
 from datetime import datetime, timedelta
-import requests
 
 # create the application object
 app = Flask(__name__)
