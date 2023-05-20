@@ -1,30 +1,109 @@
 <!DOCTYPE html>
 <html>
 <head>
-	<title>Form Example</title>
+	<title>New User Registration</title>
+	<script>
+		function showHideFields() {
+			let dropdown = document.getElementById('registration_type');
+			let selectedOption = dropdown.options[dropdown.selectedIndex].value;
+			let rfid_fields = document.getElementById('rfid_fields');
+			let manual_fields = document.getElementById('manual_fields');
+			let whitelist_fields = document.getElementById('whitelist_fields');
+
+			if (selectedOption === 'rfid') {
+				rfid_fields.style.display = 'block';
+				manual_fields.style.display = 'none';
+			} else {
+				rfid_fields.style.display = 'none';
+				manual_fields.style.display = 'block';
+			}
+
+			if (document.getElementById('whitelist').checked) {
+				whitelist_fields.style.display = 'block';
+			} else {
+				whitelist_fields.style.display = 'none';
+			}
+		}
+	</script>
 </head>
 <body>
-	<h1>Insert your data</h1>
+	<h1>New User Registration</h1>
 	<form method="POST">
-		<label for="vat_number">VAT number:</label>
-		<input type="text" id="vat_number" name="vat_number"><br>
-
-		<label for="id_number">ID number:</label>
-		<input type="text" id="id_number" name="id_number"><br>
-
-		<label for="user_role">User role:</label>
-		<select id="user_role" name="user_role">
-			<option value="USR">USR</option>
-			<option value="CO">CO</option>
-			<option value="CA">CA</option>
-			<option value="SA">SA</option>
+		<label for="registration_type">Registration Type:</label>
+		<select id="registration_type" name="registration_type" onchange="showHideFields()">
+			<option value="manual">Manual mode</option>
+			<option value="rfid">RFID key mode</option>
 		</select><br>
 
-		<label for="rfid_number">RFID number:</label>
-		<input type="text" id="rfid_number" name="rfid_number"><br>
+        <label for="fiscal_code">Fiscal Code:</label>
+			<input type="text" id="fiscal_code" name="fiscal_code"><br>
 
-		<label for="password">Password:</label>
-		<input type="password" id="password" name="password"><br>
+			<label for="company_id">Company ID:</label>
+			<input type="text" id="company_id" name="company_id"><br>
+
+			<label for="role">Role:</label>
+			<select id="role" name="role">
+				<option value="USR">User</option>
+				<option value="CO">Customer Operator</option>
+				<option value="CA">Customer Administrator</option>
+				<option value="SA">System Administrator</option>
+			</select><br>
+
+		<div id="manual_fields" style="display: block;">
+			<label for="rfid">RFID Card Number:</label>
+			<input type="text" id="rfid" name="rfid"><br>
+
+			<label for="temp_password">Temporary Password:</label>
+			<input type="text" id="temp_password" name="temp_password"><br>
+		</div>
+
+		<div id="rfid_fields" style="display: none;">
+		</div>
+
+		<label for="whitelist">Whitelist:</label>
+		<input type="checkbox" id="whitelist" name="whitelist" onchange="showHideFields()"><br>
+
+		<div id="whitelist_fields" style="display: none;">
+			<label for="whitelist_start">Whitelist start:</label>
+            <input type="date" id="whitelist_start" name="whitelist_start" value="{{ today }}">
+			<label for="whitelist_end">Whitelist end:</label>
+			<input type="date" id="whitelist_end" name="whitelist_end" value="{{ tomorrow }}"><br>
+		</div>
+
+            <label for="monday_start">Monday Start:</label>
+			<input type="time" id="monday_start" name="monday_start" value="08:00">
+			<label for="monday_end">Monday End:</label>
+			<input type="time" id="monday_end" name="monday_end" value="17:00"><br>
+
+			<label for="tuesday_start">Tuesday Start:</label>
+			<input type="time" id="tuesday_start" name="tuesday_start" value="08:00">
+			<label for="tuesday_end">Tuesday End:</label>
+			<input type="time" id="tuesday_end" name="tuesday_end" value="17:00"><br>
+
+			<label for="wednesday_start">Wednesday Start:</label>
+			<input type="time" id="wednesday_start" name="wednesday_start" value="08:00">
+			<label for="wednesday_end">Wednesday End:</label>
+			<input type="time" id="wednesday_end" name="wednesday_end" value="17:00"><br>
+
+			<label for="thursday_start">Thursday Start:</label>
+			<input type="time" id="thursday_start" name="thursday_start" value="08:00">
+			<label for="thursday_end">Thursday End:</label>
+			<input type="time" id="thursday_end" name="thursday_end" value="17:00"><br>
+
+			<label for="friday_start">Friday Start:</label>
+			<input type="time" id="friday_start" name="friday_start" value="08:00">
+			<label for="friday_end">Friday End:</label>
+			<input type="time" id="friday_end" name="friday_end" value="17:00"><br>
+
+			<label for="saturday_start">Saturday Start:</label>
+			<input type="time" id="saturday_start" name="saturday_start" value="08:00">
+			<label for="saturday_end">Saturday End:</label>
+			<input type="time" id="saturday_end" name="saturday_end" value="17:00"><br>
+
+			<label for="sunday_start">Sunday Start:</label>
+			<input type="time" id="sunday_start" name="sunday_start" value="08:00">
+			<label for="sunday_end">Sunday End:</label>
+			<input type="time" id="sunday_end" name="sunday_end" value="17:00"><br>
 
 		<input type="submit" value="Submit">
 	</form>

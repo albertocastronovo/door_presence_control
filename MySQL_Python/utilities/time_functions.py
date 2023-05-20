@@ -67,11 +67,11 @@ def time_validation(
 
     else:                               # the user is allowed to use the door on a regular basis
         dates = user_dict["vacation_dates"].split("_")
-        if is_date_valid(dates[0], dates[1], None):
+        if len(dates) == 2 and is_date_valid(dates[0], dates[1], None):
             return -2   # the user is not in whitelist, and he is supposed to be on vacation
 
     today_column = f"time_{get_weekday()}"
-    hours = user_dict[today_column].split("_")
+    hours = user_dict[today_column].split("-")
     if not is_hour_valid(hours[0], hours[1]):
         return -3       # the user can enter today, but not in this specific time instant
 

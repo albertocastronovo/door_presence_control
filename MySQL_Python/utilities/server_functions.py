@@ -1,11 +1,10 @@
 from MySQL_Python.utilities.database import Database
-from time_functions import *
-from password_functions import *
+from .time_functions import time_validation, date_to_str
+from .password_functions import *
 
 
 def get_user_password(database: Database, user: str) -> str | None:
     query = database.select_col_where("user", "password", "username", user)
-    print(query)
     try:
         return query[0]["password"]
     except IndexError:
@@ -50,7 +49,8 @@ def validate_rfid_event(
 
     user_id = user[0]["fiscal_code"]
     company_id = door_data["company_id"]
-    user_utc = db.select_wheres("user_to_customer", "cusID", company_id, "userID", user_id)
+    user_utc = db.select_wheres("user_to_customer", "cusID", company_id, "userID", user_id)[0]
+
     if len(user_utc) == 0:
         return -5   # no user with that user ID in the company with that company ID
 

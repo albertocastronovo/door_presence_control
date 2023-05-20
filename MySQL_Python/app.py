@@ -9,6 +9,7 @@ from utilities.database import Database
 from apscheduler.schedulers.background import BackgroundScheduler
 import os
 from datetime import datetime, timedelta
+import requests
 
 # create the application object
 app = Flask(__name__)
@@ -27,6 +28,14 @@ db.connect_as(
 )
 
 users_permissions = {}
+pending_user_creations = {}
+"""
+    {
+        "door_id":  {
+                        "fiscal_code":  dictionary with context (the company ID) and role, and info about time
+                    }
+    }
+"""
 
 
 def update_users_permissions():
@@ -192,22 +201,62 @@ def logout():
 
 @app.route("/door", methods=["POST"])
 def control_door():
-    rfid = request.form.get("rfid", None)
-    door_id = request.form.get("door_id", None)
-    door_status = request.form.get("door_status", None)
+    print("door start")
+    rfid = request.json.get("rfid", None)
+    door_id = request.json.get("door_id", None)
+    print(request.json)
+    if rfid is None or door_id is None:
+        return "461"
 
-    if rfid is None or door_id is None or door_status is None:
-        abort(461)
+    print("rfid check pass")
 
     request_status = validate_rfid_event(
         db=db,
-        rfid=request.form["rfid"],
-        door_id=request.form["door_id"]
+        rfid=request.json["rfid"],
+        door_id=request.json["door_id"]
     )
     if request_status != 0:
-        abort(460)
+        return "460"
 
-    return "open" if door_status == "closed" else "close"
+    print("request status pass")
+
+    get_door_status = requests.get(f"http://{request.remote_addr}:5000/door")
+    if not get_door_status.ok:
+        return "462"    # Could not reach the door
+
+    print("reached door pass")
+
+    door_data = get_door_status.json()
+    if "state" not in door_data:
+        return "463"    # request misses critical information
+
+    print("critical info pass")
+
+    command = "open" if door_data["state"] == "closed" else "close"
+    door_command = {"command": command}
+    headers = {"Content-type": "application/json"}
+    set_door_status = requests.post(f"http://{request.remote_addr}:5000/door", json=door_command, headers=headers)
+    if not set_door_status.ok:
+        return "464"    # the door was not set
+
+    print("set door pass")
+
+    return "ok"
+
+
+@app.route("/cardforuser", methods=["POST"])
+def associate_new_card_to_user():
+    rfid = request.json.get("rfid", None)
+    door_id = request.json.get("door_id", None)
+    rfid_password = request.json.get("content", None)
+
+    if rfid is None or door_id is None or rfid_password is None:
+        return "461"
+
+    if door_id not in pending_user_creations:
+        return "460"
+
+    return "OK"
 
 
 def create_temp_user(
@@ -272,21 +321,18 @@ def create_temp_user(
 @app.route("/createuser", methods=["GET", "POST"])
 def create_user():
     if request.method == "GET":
-        return render_template("create_user.html")
+        today = datetime.now().strftime("%Y-%m-%d")
+        tomorrow = datetime.now() + timedelta(days=1)
+        tomorrow = tomorrow.strftime("%Y-%m-%d")
+        return render_template("create_user.html", today=today, tomorrow=tomorrow)
     else:
-        print("sono qui!!!")
-        is_ok = create_temp_user(
-            user_context=request.form["vat_number"],
-            user_fiscal_code=request.form["id_number"],
-            user_role=request.form["user_role"],
-            rfid_number=int(request.form["rfid_number"]),
-            set_password=request.form["password"]
-        )
-        return is_ok
+        print(request.form.to_dict())
+
+        return "OK"
 
 
 if __name__ == '__main__':
     try:
-        app.run(debug=True)
+        app.run(host="192.168.1.192", port=5000, debug=True)
     finally:
         scheduler.shutdown()
