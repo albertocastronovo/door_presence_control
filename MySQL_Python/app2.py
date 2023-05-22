@@ -163,13 +163,14 @@ def check_username():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        user = request.form["username"]
+        print(request.json)
+        user = request.json["username"]
         # gestire errori se il form è incompleto (non c'è l'utente, la password...)
         saved_hash = get_user_password(db, user)
         if saved_hash is None:
             # gestire errore se l'utente è sbagliato (non esiste)
             return jsonify({"exists": False})
-        user_pw = request.form["password"]
+        user_pw = request.json["password"]
         is_correct = password_verify(user_pw, saved_hash)
         if not is_correct:
             return jsonify({"exists": False})
