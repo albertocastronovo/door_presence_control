@@ -4,7 +4,7 @@ from flask import Flask, render_template, url_for, request, redirect, \
     session, flash, jsonify, abort
 from functools import wraps
 from utilities.server_functions import get_user_password, password_verify, password_hash, validate_rfid_event, \
-    get_role_from_ids, get_id_from_user, random_secure_password, date_to_str
+    get_role_from_ids, get_id_from_user, random_secure_password, date_to_str, validate_new_user_form, get_all_roles
 from utilities.database import Database
 from apscheduler.schedulers.background import BackgroundScheduler
 import os
@@ -29,11 +29,12 @@ db.connect_as(
 
 users_permissions = {}
 pending_user_creations = {}
+
+print(get_all_roles(database=db, user="RTN1234ECC"))
 """
     {
-        "door_id":  {
-                        "fiscal_code":  dictionary with context (the company ID) and role, and info about time
-                    }
+        "door_id":  dictionary with context (the company ID) and role, and info about time
+                    
     }
 """
 
@@ -216,6 +217,7 @@ def control_door():
         door_id=request.json["door_id"]
     )
     if request_status != 0:
+        print(f"Request status: {request_status}")
         return "460"
 
     print("request status pass")
@@ -320,19 +322,23 @@ def create_temp_user(
 
 @app.route("/createuser", methods=["GET", "POST"])
 def create_user():
-    if request.method == "GET":
-        today = datetime.now().strftime("%Y-%m-%d")
-        tomorrow = datetime.now() + timedelta(days=1)
-        tomorrow = tomorrow.strftime("%Y-%m-%d")
-        return render_template("create_user.html", today=today, tomorrow=tomorrow)
-    else:
-        print(request.form.to_dict())
+    today = datetime.now().strftime("%Y-%m-%d")
+    tomorrow = datetime.now() + timedelta(days=1)
+    tomorrow = tomorrow.strftime("%Y-%m-%d")
 
-        return "OK"
+    if request.method == "GET":
+        return render_template("create_user.html", today=today, tomorrow=tomorrow)
+
+    else:
+        parameters, err_message = validate_new_user_form(request.form)
+        if parameters is None:
+            return render_template("create_user.html", today=today, tomorrow=tomorrow, err_message=err_message)
+
+    return "OK"
 
 
 if __name__ == '__main__':
     try:
-        app.run(host="192.168.1.192", port=5000, debug=True)
+        app.run(host="192.168.43.56", port=5000, debug=True)
     finally:
         scheduler.shutdown()

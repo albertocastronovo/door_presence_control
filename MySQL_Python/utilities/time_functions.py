@@ -72,7 +72,10 @@ def time_validation(
 
     today_column = f"time_{get_weekday()}"
     hours = user_dict[today_column].split("-")
+    if not isinstance(hours, list) or len(hours) < 2:
+        return -3       # Invalid hour format for the selected user in the database
+
     if not is_hour_valid(hours[0], hours[1]):
-        return -3       # the user can enter today, but not in this specific time instant
+        return -4       # the user can enter today, but not in this specific time instant
 
     return 0            # if none of the previous conditions apply, the user may interact with the door

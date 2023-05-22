@@ -27,6 +27,14 @@ def get_role_from_ids(database: Database, user: str, company: str) -> str | None
         return None
 
 
+def get_all_roles(database: Database, user: str) -> dict:
+    query = database.select_where("user_to_customer", "userID", user)
+    try:
+        return {e["cusID"]: e["role"] for e in query}
+    except:
+        return {}
+
+
 def validate_rfid_event(
         db: Database,
         rfid: str,
@@ -58,3 +66,55 @@ def validate_rfid_event(
         return -6   # the user may not enter today or at this time
 
     return 0        # if none of the previous conditions apply, the RFID event is valid
+
+
+def day_interval(form, day) -> str | None:
+    start = form.get(f"{day}_start", None)
+    end = form.get(f"{day}_end", None)
+    if start is not None and end is not None:
+        return f"{start}-{end}"
+    else:
+        return None
+
+
+def validate_new_user_form(req_form):
+    registration_type = req_form.get("registration_type", None)
+    if registration_type is None:
+        return {}, "Missing registration type"
+
+    fiscal_code = req_form.get("fiscal_code", None)
+    if fiscal_code is None:
+        return {}, "Missing user fiscal code"
+
+    company_id = req_form.get("company_id", None)
+    if company_id is None:
+        return {}, "Missing company ID"
+
+    if registration_type == "manual":
+        rfid = req_form.get("rfid", None)
+        temp_password = req_form.get("temp_password", None)
+        if temp_password is None:
+            return {}, "Missing temporary password"
+    else:
+        door_id = req_form.get("door_id", None)
+        if door_id is None:
+            return {}, "Missing client ID"
+
+    role = req_form.get("role", None)
+    if role is None:
+        return {}, "Missing new user role"
+
+    is_whitelist = req_form.get("whitelist", None)
+    if is_whitelist is not None and is_whitelist:
+        whitelist_start = req_form.get("whitelist_start", None)
+        whitelist_end = req_form.get("whitelist_end", None)
+        if whitelist_start is not None and whitelist_end is not None:
+            whitelist_dates = f"{whitelist_start}_{whitelist_end}"
+
+    time_mon = day_interval(req_form, "monday")
+
+
+
+
+
+
