@@ -1,20 +1,25 @@
 # Import the Flask class and other extensions from the flask module
 
 from flask import Flask, render_template, url_for, request, redirect, \
-    session, flash, jsonify
+    session, flash, jsonify, abort
 from functools import wraps
-from utilities.server_functions import *
+
+from pytz_deprecation_shim import PytzUsageWarning
+
+from utilities.server_functions import get_user_password, password_verify, password_hash, validate_rfid_event, \
+    get_role_from_ids, get_id_from_user, random_secure_password, date_to_str, get_all_roles
 from utilities.database import Database
 from apscheduler.schedulers.background import BackgroundScheduler
 import os
 from datetime import datetime, timedelta
+import requests
+import warnings
+warnings.filterwarnings("ignore", category=PytzUsageWarning)
 
 # create the application object
 app = Flask(__name__)
 app.secret_key = os.getenv("door_secret")
 
-# your_hashed_pw = password_hash("password3")
-# print(your_hashed_pw)
 
 db = Database(
     host="localhost",
@@ -28,6 +33,14 @@ db.connect_as(
 )
 
 users_permissions = {}
+pending_user_creations = {}
+"""
+    {
+        "door_id":  {
+                        "fiscal_code":  dictionary with context (the company ID) and role, and info about time
+                    }
+    }
+"""
 
 
 def update_users_permissions():
@@ -160,7 +173,7 @@ def check_username():
     return jsonify({"exists": False})
 
 
-@app.route('/login', methods=['GET', 'POST'])
+@app.route('/login', methods=['POST'])
 def login():
     if request.method == 'POST':
         print(request.json)
@@ -176,9 +189,17 @@ def login():
             return jsonify({"exists": False})
         # qui la roba che succede se il login è giusto
         session["username"] = user
-        return jsonify({"exists": True})
-    else:
-        return jsonify({"exists": False})
+        roles = log_to_page(user)
+        print(roles)
+        return jsonify({"exists": True}, roles)
+    # else:
+    #     return jsonify({"exists": False})
+
+
+def log_to_page(user):
+    fiscal_code = get_id_from_user(db, user)
+    roles = get_all_roles(db, fiscal_code)
+    return roles
 
 
 @app.route('/logout')
@@ -189,7 +210,66 @@ def logout():
     return redirect(url_for('welcome'))
 
 
-#@permissions_required(["CO", "CA", "SA"])
+@app.route("/door", methods=["POST"])
+def control_door():
+    print("door start")
+    rfid = request.json.get("rfid", None)
+    door_id = request.json.get("door_id", None)
+    print(request.json)
+    if rfid is None or door_id is None:
+        return "461"
+
+    print("rfid check pass")
+
+    request_status = validate_rfid_event(
+        db=db,
+        rfid=request.json["rfid"],
+        door_id=request.json["door_id"]
+    )
+    if request_status != 0:
+        return "460"
+
+    print("request status pass")
+
+    get_door_status = requests.get(f"http://{request.remote_addr}:5000/door")
+    if not get_door_status.ok:
+        return "462"    # Could not reach the door
+
+    print("reached door pass")
+
+    door_data = get_door_status.json()
+    if "state" not in door_data:
+        return "463"    # request misses critical information
+
+    print("critical info pass")
+
+    command = "open" if door_data["state"] == "closed" else "close"
+    door_command = {"command": command}
+    headers = {"Content-type": "application/json"}
+    set_door_status = requests.post(f"http://{request.remote_addr}:5000/door", json=door_command, headers=headers)
+    if not set_door_status.ok:
+        return "464"    # the door was not set
+
+    print("set door pass")
+
+    return "ok"
+
+
+@app.route("/cardforuser", methods=["POST"])
+def associate_new_card_to_user():
+    rfid = request.json.get("rfid", None)
+    door_id = request.json.get("door_id", None)
+    rfid_password = request.json.get("content", None)
+
+    if rfid is None or door_id is None or rfid_password is None:
+        return "461"
+
+    if door_id not in pending_user_creations:
+        return "460"
+
+    return "OK"
+
+
 def create_temp_user(
         user_context: str = "IT98803960651",
         user_fiscal_code: str = "CSTLRT98",
@@ -252,17 +332,14 @@ def create_temp_user(
 @app.route("/createuser", methods=["GET", "POST"])
 def create_user():
     if request.method == "GET":
-        return render_template("create_user.html")
+        today = datetime.now().strftime("%Y-%m-%d")
+        tomorrow = datetime.now() + timedelta(days=1)
+        tomorrow = tomorrow.strftime("%Y-%m-%d")
+        return render_template("create_user.html", today=today, tomorrow=tomorrow)
     else:
-        print("sono qui!!!")
-        is_ok = create_temp_user(
-            user_context=request.form["vat_number"],
-            user_fiscal_code=request.form["id_number"],
-            user_role=request.form["user_role"],
-            rfid_number=int(request.form["rfid_number"]),
-            set_password=request.form["password"]
-        )
-        return is_ok
+        print(request.form.to_dict())
+
+        return "OK"
 
 
 if __name__ == '__main__':
