@@ -23,8 +23,8 @@ db = Database(
 )
 
 db.connect_as(
-    user="alberto",
-    password="alberto"
+    user="root",
+    password=""
 )
 
 users_permissions = {}
