@@ -176,15 +176,18 @@ def login():
     # if request.method == 'POST':
     #print(request.json)
     user = request.json["username"]
+    roles = {
+        "company": "ROLE"
+    }
     # gestire errori se il form è incompleto (non c'è l'utente, la password...)
     saved_hash = get_user_password(db, user)
     if saved_hash is None:
         # gestire errore se l'utente è sbagliato (non esiste)
-        return jsonify({"exists": False})
+        return jsonify({"exists": False}, roles)
     user_pw = request.json["password"]
     is_correct = password_verify(user_pw, saved_hash)
     if not is_correct:
-        return jsonify({"exists": False})
+        return jsonify({"exists": False}, roles)
     # qui la roba che succede se il login è giusto
     session["username"] = user
     roles = log_to_page(user)
