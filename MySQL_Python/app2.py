@@ -177,7 +177,8 @@ def login():
     #print(request.json)
     user = request.json["username"]
     roles = {
-        "company": "ROLE"
+        "company": "ROLE",
+        "role":"ROLE"
     }
     # gestire errori se il form è incompleto (non c'è l'utente, la password...)
     saved_hash = get_user_password(db, user)
