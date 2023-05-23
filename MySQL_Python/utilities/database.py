@@ -56,12 +56,16 @@ class Database:
     def __execute_query(
             self,
             query: str,
-            params: tuple | None = None
+            params: tuple | None = None,
+            disable_fetchall: bool = False
                      ):
         try:
             self.__cursor.execute(query, params)
             self.__connection.commit()
-            return self.__cursor.fetchall()
+            if not disable_fetchall:
+                return self.__cursor.fetchall()
+            else:
+                return 1
         except con.Error as err:
             print(f"Error: {err}")
             return None
@@ -77,9 +81,12 @@ class Database:
         print(parameters)
         query = f"INSERT INTO {table} ({columns_str}) VALUES ({parameters})"
         try:
-            self.__execute_query(query, values)
+            print(query)
+            print(values)
+            self.__execute_query(query, values, disable_fetchall=True)
             return 0
-        except:
+        except Exception as e:
+            print(e)
             return -1
 
     def select_all(self, table: str):

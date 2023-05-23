@@ -26,6 +26,9 @@
 		}
 	</script>
 </head>
+{% if err_message %}
+        <p style="color: red;">{{ err_message }}</p>
+    {% endif %}
 <body>
 	<h1>New User Registration</h1>
 	<form method="POST">

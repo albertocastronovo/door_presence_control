@@ -1,6 +1,7 @@
 from MySQL_Python.utilities.database import Database
 from .time_functions import time_validation, date_to_str
 from .password_functions import *
+from .data_validation import validate_data
 
 
 def get_user_password(database: Database, user: str) -> str | None:
@@ -31,7 +32,7 @@ def get_all_roles(database: Database, user: str) -> dict:
     query = database.select_where("user_to_customer", "userID", user)
     try:
         return {e["cusID"]: e["role"] for e in query}
-    except:
+    except KeyError:
         return {}
 
 
@@ -78,30 +79,34 @@ def day_interval(form, day) -> str | None:
 
 
 def validate_new_user_form(req_form):
+    req_form = req_form.to_dict()
+    print(f"Req form: {req_form}")
     registration_type = req_form.get("registration_type", None)
-    if registration_type is None:
+    if registration_type is None or registration_type == "":
         return {}, "Missing registration type"
 
     fiscal_code = req_form.get("fiscal_code", None)
-    if fiscal_code is None:
+    if not validate_data(fiscal_code, "user_id"):
         return {}, "Missing user fiscal code"
 
     company_id = req_form.get("company_id", None)
-    if company_id is None:
+    if not validate_data(company_id, "customer_id"):
         return {}, "Missing company ID"
 
     if registration_type == "manual":
         rfid = req_form.get("rfid", None)
         temp_password = req_form.get("temp_password", None)
-        if temp_password is None:
+        if not validate_data(temp_password, "password"):
             return {}, "Missing temporary password"
     else:
         door_id = req_form.get("door_id", None)
+        temp_password = None
+        rfid = None
         if door_id is None:
             return {}, "Missing client ID"
 
     role = req_form.get("role", None)
-    if role is None:
+    if role is None or role == "":
         return {}, "Missing new user role"
 
     is_whitelist = req_form.get("whitelist", None)
@@ -110,11 +115,33 @@ def validate_new_user_form(req_form):
         whitelist_end = req_form.get("whitelist_end", None)
         if whitelist_start is not None and whitelist_end is not None:
             whitelist_dates = f"{whitelist_start}_{whitelist_end}"
+        else:
+            whitelist_dates = f"none"
+    else:
+        whitelist_dates = f"none"
 
     time_mon = day_interval(req_form, "monday")
+    time_tue = day_interval(req_form, "tuesday")
+    time_wed = day_interval(req_form, "wednesday")
+    time_thu = day_interval(req_form, "thursday")
+    time_fri = day_interval(req_form, "friday")
+    time_sat = day_interval(req_form, "saturday")
+    time_sun = day_interval(req_form, "sunday")
 
+    return {
+        "cusID": company_id,
+        "userID": fiscal_code,
+        "role": role,
+        "whitelist": is_whitelist,
+        "time_mon": time_mon,
+        "time_tue": time_tue,
+        "time_wed": time_wed,
+        "time_thu": time_thu,
+        "time_fri": time_fri,
+        "time_sat": time_sat,
+        "time_sun": time_sun,
+        "whitelist_dates": whitelist_dates,
+        "temp_password": temp_password,
+        "rfid": rfid
 
-
-
-
-
+    }, f"OK_{registration_type}"

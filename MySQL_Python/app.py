@@ -30,7 +30,6 @@ db.connect_as(
 users_permissions = {}
 pending_user_creations = {}
 
-print(get_all_roles(database=db, user="RTN1234ECC"))
 """
     {
         "door_id":  dictionary with context (the company ID) and role, and info about time
@@ -202,7 +201,6 @@ def logout():
 
 @app.route("/door", methods=["POST"])
 def control_door():
-    print("door start")
     rfid = request.json.get("rfid", None)
     door_id = request.json.get("door_id", None)
     print(request.json)
@@ -258,7 +256,18 @@ def associate_new_card_to_user():
     if door_id not in pending_user_creations:
         return "460"
 
-    return "OK"
+    creation_status = create_new_user(pending_user_creations[door_id])
+
+    return f"OK {creation_status}"
+
+
+def create_new_user(params: dict):
+    db_insert = db.insert(
+        "user",
+        ("username", "password", "fiscal_code", "flag_phone", "flag_mail", "RFID_key", "flag_password_changed"),
+        (params["userID"], password_hash(params["temp_password"]), params["userID"], 0, 0, int(params["rfid"]), 0)
+    )
+    return db_insert
 
 
 def create_temp_user(
@@ -331,14 +340,22 @@ def create_user():
 
     else:
         parameters, err_message = validate_new_user_form(request.form)
-        if parameters is None:
-            return render_template("create_user.html", today=today, tomorrow=tomorrow, err_message=err_message)
+        print(f"errore: {err_message}")
+        if err_message == "OK_rfid":
+            pending_user_creations[parameters["door_id"]] = parameters
+            return "OK rfid"
+        elif err_message == "OK_manual":
+            user_created = create_new_user(parameters)
+            if user_created != 0:
+                return f"Errore {user_created}"
+            return "OK manual"
 
-    return "OK"
+        else:
+            return render_template("create_user.html", today=today, tomorrow=tomorrow, err_message=err_message)
 
 
 if __name__ == '__main__':
     try:
-        app.run(host="192.168.43.56", port=5000, debug=True)
+        app.run(port=5000, debug=True)
     finally:
         scheduler.shutdown()
