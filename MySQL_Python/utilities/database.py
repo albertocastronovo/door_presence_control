@@ -17,6 +17,9 @@ class Database:
         self.__connection:  CMySQLConnection | None = None
         self.__cursor:      CMySQLCursor | None = None
 
+    def is_connected(self):
+        return self.__connection.is_connected() if self.__connection is not None else False
+
     def connect_as(
             self,
             user: str | None = None,

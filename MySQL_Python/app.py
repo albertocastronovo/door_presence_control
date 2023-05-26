@@ -8,6 +8,7 @@ from utilities.server_functions import get_user_password, password_verify, passw
 from utilities.database import Database
 from apscheduler.schedulers.background import BackgroundScheduler
 import os
+import time
 from datetime import datetime, timedelta
 import requests
 
@@ -15,20 +16,29 @@ import requests
 app = Flask(__name__)
 app.secret_key = os.getenv("door_secret")
 
+retry_seconds = 10
+while True:
+    db = Database(
+        host="localhost",
+        database="door_cntrl_system",
+        port=3306
+    )
 
-db = Database(
-    host="localhost",
-    database="door_cntrl_system",
-    port=3306
-)
+    db.connect_as(
+        user="alberto",
+        password="alberto"
+    )
+    if db.is_connected():
+        print(f"Connected to database.")
+        break
+    print(f"Could not connect to database. Retrying in {retry_seconds} seconds.")
+    time.sleep(retry_seconds)
 
-db.connect_as(
-    user="alberto",
-    password="alberto"
-)
 
 users_permissions = {}
-pending_user_creations = {}
+pending_user_creations: dict[str, list[dict]] = {}
+accepted_user_creations: dict[str, list[dict]] = {}
+rejected_user_creations: dict[str, list[dict]] = {}
 
 """
     {
@@ -43,10 +53,25 @@ def update_users_permissions():
     users_permissions = {r["role"]: r for r in db.select_all("roles")}
 
 
+def reset_user_creations():
+    global accepted_user_creations
+    global rejected_user_creations
+    global pending_user_creations
+    accepted_user_creations.clear()
+    rejected_user_creations.clear()
+    pending_user_creations.clear()
+
+
 update_users_permissions()
+reset_user_creations()
 scheduler = BackgroundScheduler()
-scheduler.add_job(
+scheduler.add_job(      # update user permissions from database at 3 AM every day (local machine time)
     func=update_users_permissions,
+    trigger="cron",
+    hour=3
+)
+scheduler.add_job(      # clear RFID mode user creation dictionaries at 3 AM every day (local machine time)
+    func=reset_user_creations,
     trigger="cron",
     hour=3
 )
@@ -138,18 +163,11 @@ def update_user():
     gender = request.form["gender"]
     new_password = request.form["new_password"]
 
-    print(username)
-    print(new_password)
-    print(prefix + phone_number)
-    print(email)
-    print(address)
-    print(birth_date)
-    print(gender)
-
     update = db.update_multiple(
         table="user",
         column_names=["username", "password", "phone_number", "mail", "address", "birth_date", "gender"],
-        column_values=[username, password_hash(new_password), prefix+phone_number, email, address, birth_date, gender],
+        column_values=[username, password_hash(new_password), prefix + phone_number, email, address, birth_date,
+                       gender],
         where_column="fiscal_code",
         where_value=session["username"]
     )
@@ -222,13 +240,13 @@ def control_door():
 
     get_door_status = requests.get(f"http://{request.remote_addr}:5000/door")
     if not get_door_status.ok:
-        return "462"    # Could not reach the door
+        return "462"  # Could not reach the door
 
     print("reached door pass")
 
     door_data = get_door_status.json()
     if "state" not in door_data:
-        return "463"    # request misses critical information
+        return "463"  # request misses critical information
 
     print("critical info pass")
 
@@ -237,7 +255,7 @@ def control_door():
     headers = {"Content-type": "application/json"}
     set_door_status = requests.post(f"http://{request.remote_addr}:5000/door", json=door_command, headers=headers)
     if not set_door_status.ok:
-        return "464"    # the door was not set
+        return "464"  # the door was not set
 
     print("set door pass")
 
@@ -246,6 +264,10 @@ def control_door():
 
 @app.route("/cardforuser", methods=["POST"])
 def associate_new_card_to_user():
+    global accepted_user_creations
+    global rejected_user_creations
+    global pending_user_creations
+
     rfid = request.json.get("rfid", None)
     door_id = request.json.get("door_id", None)
     rfid_password = request.json.get("content", None)
@@ -256,7 +278,30 @@ def associate_new_card_to_user():
     if door_id not in pending_user_creations:
         return "460"
 
-    creation_status = create_new_user(pending_user_creations[door_id])
+    if len(pending_user_creations[door_id]) < 1:
+        return "460"
+
+    # check if card is already associated to some user in the database
+    card_in_database = db.select_where("user", "RFID_key", rfid)
+    pending_user_creations[door_id][0]["rfid"] = rfid
+    pending_user_creations[door_id][0]["temp_password"] = rfid_password
+    pending_user_creations[door_id][0]["time"] = datetime.now()
+    if len(card_in_database) == 0:
+        creation_status = create_new_user(pending_user_creations[door_id][0])
+    else:
+        creation_status = -1
+
+    if creation_status == 0:
+        if door_id not in accepted_user_creations:
+            accepted_user_creations[door_id] = [pending_user_creations[door_id][0]]
+        else:
+            accepted_user_creations[door_id].append(pending_user_creations[door_id][0])
+    else:
+        if door_id not in rejected_user_creations:
+            rejected_user_creations[door_id] = [pending_user_creations[door_id][0]]
+        else:
+            rejected_user_creations[door_id].append(pending_user_creations[door_id][0])
+    del pending_user_creations[door_id][0]
 
     return f"OK {creation_status}"
 
@@ -276,13 +321,12 @@ def create_temp_user(
         user_role: str = "USR",
         rfid_number: int = 42,
         set_password: str | None = "Paolo1!"
-                    ):
-
+):
     caller_role = get_role_from_ids(db, get_id_from_user(db, session["username"]), user_context)
     if caller_role == "USR" or \
-        (caller_role == "CO" and user_role != "USR") or \
+            (caller_role == "CO" and user_role != "USR") or \
             (caller_role == "CA" and user_role not in ["USR", "CO"]):
-        return "no permissions"   # no permissions to make the operation
+        return "no permissions"  # no permissions to make the operation
 
     user_fetch = db.select_where(
         table="user",
@@ -290,9 +334,9 @@ def create_temp_user(
         value=user_fiscal_code
     )
 
-    if len(user_fetch) < 1:     # se l'utente non esiste proprio
+    if len(user_fetch) < 1:  # se l'utente non esiste proprio
         password = set_password if set_password is not None else random_secure_password()
-        db.insert(              # viene creato un utente nuovo, con password temporanea e RFID data
+        db.insert(  # viene creato un utente nuovo, con password temporanea e RFID data
             table="user",
             columns=("username", "password", "fiscal_code", "RFID_key"),
             values=(user_fiscal_code, password_hash(password), user_fiscal_code, rfid_number)
@@ -329,6 +373,24 @@ def create_temp_user(
     return "OK"
 
 
+@app.route("/createdashboard", methods=["GET"])
+def create_dashboard():
+    print(f"Pending: {pending_user_creations}")
+    print(f"Accepted: {accepted_user_creations}")
+    print(f"Rejected: {rejected_user_creations}")
+    return render_template("rfid_creation_dashboard.html",
+                           now=datetime.now(),
+                           terminal_ids=list(set(
+                               list(accepted_user_creations.keys()) +
+                               list(pending_user_creations.keys()) +
+                               list(rejected_user_creations.keys())
+                           )),
+                           accepted_registrations=accepted_user_creations,
+                           pending_registrations=pending_user_creations,
+                           rejected_registrations=rejected_user_creations
+                           )
+
+
 @app.route("/createuser", methods=["GET", "POST"])
 def create_user():
     today = datetime.now().strftime("%Y-%m-%d")
@@ -341,9 +403,34 @@ def create_user():
     else:
         parameters, err_message = validate_new_user_form(request.form)
         print(f"errore: {err_message}")
+        user_id = parameters["userID"]
         if err_message == "OK_rfid":
-            pending_user_creations[parameters["door_id"]] = parameters
-            return "OK rfid"
+            # check if the creation of this user is already pending
+            users_with_same_id = [
+                inner_dict for inner_list in pending_user_creations.values()
+                for inner_dict in inner_list
+                if user_id in inner_dict and inner_dict["userID"] == user_id
+            ]
+            if len(users_with_same_id) > 0:
+                return render_template("create_user.html",
+                                       today=today,
+                                       tomorrow=tomorrow,
+                                       err_message="This user is already being created")
+
+            # check if the user already exists in the database
+            if len(db.select_where("user", "fiscal_code", parameters["userID"])) > 0:
+                return render_template("create_user.html",
+                                       today=today,
+                                       tomorrow=tomorrow,
+                                       err_message="This user already exists in the database")
+
+            parameters["time"] = datetime.now()
+            door_id = parameters["door_id"]
+            if door_id not in pending_user_creations:
+                pending_user_creations[door_id] = []
+            pending_user_creations[door_id].append(parameters)
+
+            return redirect(url_for("create_dashboard"))
         elif err_message == "OK_manual":
             user_created = create_new_user(parameters)
             if user_created != 0:
@@ -356,6 +443,6 @@ def create_user():
 
 if __name__ == '__main__':
     try:
-        app.run(port=5000, debug=True)
+        app.run(host="192.168.43.56", port=5000, debug=True)
     finally:
         scheduler.shutdown()

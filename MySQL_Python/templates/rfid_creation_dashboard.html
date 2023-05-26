@@ -1,0 +1,133 @@
+<style>
+  table {
+    border-collapse: collapse;
+  }
+
+  th, td {
+    padding: 10px;
+    text-align: left;
+  }
+
+  td:first-child, th:first-child {
+    text-align: right;
+  }
+</style>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<title>User Registration Status</title>
+	<meta http-equiv="refresh" content="30"> <!-- Refresh page every 10 seconds -->
+</head>
+<body onload="updateRegistrations()">
+	<h1>User Registration Status</h1>
+
+	<!-- Dropdown menu for selecting Terminal ID -->
+	<label for="terminal_id">Select Terminal ID:</label>
+	<select id="terminal_id" onchange="updateRegistrations()">
+    <option value={{ terminal_ids[0] }} selected>{{ terminal_ids[0] }}</option>
+		<!-- Populate options with keys from all three dictionaries -->
+		{% for terminal_id in terminal_ids[1:] %}
+			<option value="{{ terminal_id }}">{{ terminal_id }}</option>
+		{% endfor %}
+	</select>
+
+	<!-- Tables for displaying pending, accepted, and rejected registrations -->
+	<h2>Pending Registration</h2>
+	<table id="pending_table">
+		<thead>
+			<tr>
+				<th>Username</th>
+				<th>Datetime</th>
+			</tr>
+		</thead>
+		<tbody>
+			<!-- Populate table with pending registrations for selected Terminal ID -->
+		</tbody>
+	</table>
+
+	<h2>Accepted Registrations</h2>
+	<table id="accepted_table">
+		<thead>
+			<tr>
+				<th>Username</th>
+				<th>Datetime</th>
+			</tr>
+		</thead>
+		<tbody>
+			<!-- Populate table with accepted registrations for selected Terminal ID -->
+
+		</tbody>
+	</table>
+
+	<h2>Rejected Registrations</h2>
+	<table id="rejected_table">
+		<thead>
+			<tr>
+				<th>Username</th>
+				<th>Datetime</th>
+			</tr>
+		</thead>
+		<tbody>
+			<!-- Populate table with rejected registrations for selected Terminal ID -->
+
+		</tbody>
+	</table>	<!-- JavaScript function for updating registration tables when Terminal ID is changed -->
+	<script>
+        let lastID = localStorage.getItem("terminal_id")
+        if(lastID) {
+            document.getElementById("terminal_id").value = lastID
+        }
+        document.getElementById("terminal_id").addEventListener(
+            "change", function() {
+                let value = this.value;
+                localStorage.setItem("terminal_id", value)
+            }
+        );
+
+		function updateRegistrations() {
+			// Get selected Terminal ID from dropdown menu
+			let terminalId = document.getElementById("terminal_id").value;
+
+			// Get tables for pending, accepted, and rejected registrations
+			let pendingTable = document.getElementById("pending_table");
+			let acceptedTable = document.getElementById("accepted_table");
+			let rejectedTable = document.getElementById("rejected_table");
+
+			// Clear tables
+			pendingTable.innerHTML = "<thead><tr><th>Username</th><th>Datetime</th></tr></thead><tbody></tbody>";
+			acceptedTable.innerHTML = "<thead><tr><th>Username</th><th>Datetime</th><th>Associated RFID</th></tr></thead><tbody></tbody>";
+			rejectedTable.innerHTML = "<thead><tr><th>Username</th><th>Datetime</th><th>Attempted RFID</th></tr></thead><tbody></tbody>";
+
+			// Populate tables with registrations for selected Terminal ID
+            {% for pen_key, pen_val in pending_registrations.items() %}
+                if (terminalId === "{{ pen_key }}") {
+                {% for vp in pen_val %}
+                    pendingTable.innerHTML += "<tr><td>{{ vp["userID"] }}</td><td>{{ vp["time"] }}</td></tr>";
+                    {% endfor %}
+                }
+
+            {% endfor %}
+
+            {% for acc_key, acc_val in accepted_registrations.items() %}
+                if (terminalId === "{{ acc_key }}") {
+                {% for va in acc_val %}
+                    acceptedTable.innerHTML += "<tr><td>{{ va["userID"] }}</td><td>{{ va["time"] }}</td><td>{{ va["rfid"] }}</td></tr>";
+                    {% endfor %}
+                }
+
+            {% endfor %}
+
+            {% for rej_key, rej_val in rejected_registrations.items() %}
+                if (terminalId === "{{ rej_key }}") {
+                {% for vr in rej_val %}
+                    rejectedTable.innerHTML += "<tr><td>{{ vr["userID"] }}</td><td>{{ vr["time"] }}</td><td>{{ vr["rfid"] }}</td></tr>";
+                    {% endfor %}
+                }
+
+            {% endfor %}
+
+		}
+	</script>
+</body>
+</html>

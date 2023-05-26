@@ -98,11 +98,12 @@ def validate_new_user_form(req_form):
         temp_password = req_form.get("temp_password", None)
         if not validate_data(temp_password, "password"):
             return {}, "Missing temporary password"
+        door_id = "none"
     else:
         door_id = req_form.get("door_id", None)
         temp_password = None
         rfid = None
-        if door_id is None:
+        if door_id is None or door_id == "":
             return {}, "Missing client ID"
 
     role = req_form.get("role", None)
@@ -142,6 +143,7 @@ def validate_new_user_form(req_form):
         "time_sun": time_sun,
         "whitelist_dates": whitelist_dates,
         "temp_password": temp_password,
-        "rfid": rfid
+        "rfid": rfid,
+        "door_id": door_id
 
     }, f"OK_{registration_type}"
