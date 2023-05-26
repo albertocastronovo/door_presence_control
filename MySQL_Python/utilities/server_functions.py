@@ -29,7 +29,6 @@ def get_role_from_ids(database: Database, user: str, company: str) -> str | None
 
 
 def get_all_roles(database: Database, user: str) -> list[dict]:
-    a = 1
     return database.select_join_where(("name", "role"), "user_to_customer", "customer", "cusID", "userID", user)
 
 
