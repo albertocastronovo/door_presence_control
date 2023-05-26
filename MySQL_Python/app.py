@@ -34,6 +34,7 @@ while True:
     print(f"Could not connect to database. Retrying in {retry_seconds} seconds.")
     time.sleep(retry_seconds)
 
+get_all_roles(db, "RTN1234ECC")
 
 users_permissions = {}
 pending_user_creations: dict[str, list[dict]] = {}

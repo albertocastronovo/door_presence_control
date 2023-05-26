@@ -29,11 +29,7 @@ def get_role_from_ids(database: Database, user: str, company: str) -> str | None
 
 
 def get_all_roles(database: Database, user: str) -> list[dict]:
-    query = database.select_where("user_to_customer", "userID", user)
-    try:
-        return [{"company": e["cusID"], "role": e["role"]} for e in query]
-    except KeyError:
-        return []
+    return database.select_join_where(("name", "role"), "user_to_customer", "customer", "cusID", "name", "userID", user)
 
 
 def validate_rfid_event(
