@@ -29,7 +29,8 @@ def get_role_from_ids(database: Database, user: str, company: str) -> str | None
 
 
 def get_all_roles(database: Database, user: str) -> list[dict]:
-    return database.select_join_where(("name", "role"), "user_to_customer", "customer", "cusID", "userID", user)
+    query = database.select_join_where(("name", "role"), "user_to_customer", "customer", "cusID", "userID", user)
+    return [{"company": d["name"], "role": d["role"]} for d in query]
 
 
 def validate_rfid_event(
@@ -94,12 +95,11 @@ def validate_new_user_form(req_form):
         temp_password = req_form.get("temp_password", None)
         if not validate_data(temp_password, "password"):
             return {}, "Missing temporary password"
-        door_id = "none"
     else:
         door_id = req_form.get("door_id", None)
         temp_password = None
         rfid = None
-        if door_id is None or door_id == "":
+        if door_id is None:
             return {}, "Missing client ID"
 
     role = req_form.get("role", None)
@@ -139,7 +139,6 @@ def validate_new_user_form(req_form):
         "time_sun": time_sun,
         "whitelist_dates": whitelist_dates,
         "temp_password": temp_password,
-        "rfid": rfid,
-        "door_id": door_id
+        "rfid": rfid
 
     }, f"OK_{registration_type}"
