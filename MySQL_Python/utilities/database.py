@@ -135,13 +135,14 @@ class Database:
             requested_cols: tuple[str, ...],
             table_1: str,   # quella che contiene utente e VAT
             table_2: str,   # quella che contiene VAT e nome azienda
-            col_1:  str,    # company VAT
-            col_2: str,     # company name
+            col_join:  str,    # company VAT
             col_where: str, # userID
             col_value: str  # codice fiscale
     ):
         cols = ", ".join(requested_cols)
-        query = f"SELECT {cols} FROM {table_1} JOIN {table_2} ON {table_1}.{col_1} = {table_2}.{col_1} WHERE {table_1}.{col_where} = %s"
+        query = f"SELECT {cols} FROM {table_1} " \
+                f"JOIN {table_2} ON {table_1}.{col_join} = {table_2}.{col_join} " \
+                f"WHERE {table_1}.{col_where} = %s"
         return self.__execute_query(query, (col_value,))
 
     def update(
