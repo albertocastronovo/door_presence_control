@@ -12,12 +12,12 @@ import os
 from datetime import datetime, timedelta
 import requests
 import warnings
+
 warnings.filterwarnings("ignore", category=PytzUsageWarning)
 
 # create the application object
 app = Flask(__name__)
 app.secret_key = os.getenv("door_secret")
-
 
 db = Database(
     host="localhost",
@@ -152,7 +152,8 @@ def update_user():
     update = db.update_multiple(
         table="user",
         column_names=["username", "password", "phone_number", "mail", "address", "birth_date", "gender"],
-        column_values=[username, password_hash(new_password), prefix+phone_number, email, address, birth_date, gender],
+        column_values=[username, password_hash(new_password), prefix + phone_number, email, address, birth_date,
+                       gender],
         where_column="fiscal_code",
         where_value=session["username"]
     )
@@ -173,29 +174,30 @@ def check_username():
 
 @app.route('/login', methods=['POST'])
 def login():
-    # if request.method == 'POST':
-    #print(request.json)
     user = request.json["username"]
     roles = {
-        "company": "ROLE",
-        "role":"ROLE"
+        "company": "COMPANY",
+        "role": "ROLE"
     }
     # gestire errori se il form è incompleto (non c'è l'utente, la password...)
     saved_hash = get_user_password(db, user)
     if saved_hash is None:
         # gestire errore se l'utente è sbagliato (non esiste)
-        return jsonify({"exists": False}, roles)
+        return jsonify({"exists": False}, {"registered": False}, roles)
     user_pw = request.json["password"]
     is_correct = password_verify(user_pw, saved_hash)
     if not is_correct:
-        return jsonify({"exists": False}, roles)
+        return jsonify({"exists": False}, {"registered": False}, roles)
+    flag_psw = db.select_col_where("user", "flag_password_changed", "username", user)[0]["flag_password_changed"]
+    print(flag_psw)
+    if flag_psw == 0:
+        return jsonify({"exists": True}, {"registered": False}, roles)
     # qui la roba che succede se il login è giusto
     session["username"] = user
     roles = log_to_page(user)
     print(roles)
-    return jsonify({"exists": True}, roles)
-    # else:
-    #     return jsonify({"exists": False})
+    return jsonify({"exists": True}, {"registered": True}, roles)
+
 
 
 def log_to_page(user):
@@ -235,13 +237,13 @@ def control_door():
 
     get_door_status = requests.get(f"http://{request.remote_addr}:5000/door")
     if not get_door_status.ok:
-        return "462"    # Could not reach the door
+        return "462"  # Could not reach the door
 
     print("reached door pass")
 
     door_data = get_door_status.json()
     if "state" not in door_data:
-        return "463"    # request misses critical information
+        return "463"  # request misses critical information
 
     print("critical info pass")
 
@@ -250,7 +252,7 @@ def control_door():
     headers = {"Content-type": "application/json"}
     set_door_status = requests.post(f"http://{request.remote_addr}:5000/door", json=door_command, headers=headers)
     if not set_door_status.ok:
-        return "464"    # the door was not set
+        return "464"  # the door was not set
 
     print("set door pass")
 
@@ -278,13 +280,12 @@ def create_temp_user(
         user_role: str = "USR",
         rfid_number: int = 42,
         set_password: str | None = "Paolo1!"
-                    ):
-
+):
     caller_role = get_role_from_ids(db, get_id_from_user(db, session["username"]), user_context)
     if caller_role == "USR" or \
-        (caller_role == "CO" and user_role != "USR") or \
+            (caller_role == "CO" and user_role != "USR") or \
             (caller_role == "CA" and user_role not in ["USR", "CO"]):
-        return "no permissions"   # no permissions to make the operation
+        return "no permissions"  # no permissions to make the operation
 
     user_fetch = db.select_where(
         table="user",
@@ -292,9 +293,9 @@ def create_temp_user(
         value=user_fiscal_code
     )
 
-    if len(user_fetch) < 1:     # se l'utente non esiste proprio
+    if len(user_fetch) < 1:  # se l'utente non esiste proprio
         password = set_password if set_password is not None else random_secure_password()
-        db.insert(              # viene creato un utente nuovo, con password temporanea e RFID data
+        db.insert(  # viene creato un utente nuovo, con password temporanea e RFID data
             table="user",
             columns=("username", "password", "fiscal_code", "RFID_key"),
             values=(user_fiscal_code, password_hash(password), user_fiscal_code, rfid_number)
