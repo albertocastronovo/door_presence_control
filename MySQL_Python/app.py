@@ -4,17 +4,22 @@ from flask import Flask, render_template, url_for, request, redirect, \
     session, flash, jsonify, abort
 from functools import wraps
 from utilities.server_functions import get_user_password, password_verify, password_hash, validate_rfid_event, \
-    get_role_from_ids, get_id_from_user, random_secure_password, date_to_str, validate_new_user_form, get_all_roles
+    get_role_from_ids, get_id_from_user, random_secure_password, date_to_str, validate_new_user_form, get_all_roles, \
+    get_geninfo_from_user
 from utilities.database import Database
+from utilities.door_user import DoorUser, DoorUserSerializer
 from apscheduler.schedulers.background import BackgroundScheduler
+from utilities.custom_http_errors import DoorHTTPException
 import os
 import time
 from datetime import datetime, timedelta
 import requests
+from copy import deepcopy
 
 # create the application object
 app = Flask(__name__)
 app.secret_key = os.getenv("door_secret")
+app.session_interface.serializer = DoorUserSerializer()
 
 retry_seconds = 10
 while True:
@@ -26,7 +31,7 @@ while True:
 
     db.connect_as(
         user="alberto",
-        password="alberto"
+        password="root"
     )
     if db.is_connected():
         print(f"Connected to database.")
@@ -36,10 +41,10 @@ while True:
 
 print(get_all_roles(db, "RTN1234ECC"))
 
-users_permissions = {}
 pending_user_creations: dict[str, list[dict]] = {}
 accepted_user_creations: dict[str, list[dict]] = {}
 rejected_user_creations: dict[str, list[dict]] = {}
+role_permissions: dict[str, dict[str, bool]] = {}
 
 """
     {
@@ -50,8 +55,13 @@ rejected_user_creations: dict[str, list[dict]] = {}
 
 
 def update_users_permissions():
-    global users_permissions
-    users_permissions = {r["role"]: r for r in db.select_all("roles")}
+    role_data = db.select_all("roles")
+    for role in role_data:
+        role_permissions[role["name"]] = {k: v for k, v in role.items() if k != "name"}
+
+
+update_users_permissions()
+print(role_permissions)
 
 
 def reset_user_creations():
@@ -92,30 +102,62 @@ def login_required(f):
     return wrap
 
 
-def permissions_required(flag_list):
-    def wrapper_function(f):
+def required_permissions(required_perm: tuple[str, ...], company_check: bool = True):
+    def decorator(f):
         @wraps(f)
-        def wrapper(*args, **kwargs):
-            permissions = session["permissions"]
-            for flag in flag_list:
-                print(f"flag: {flag}")
-                if not permissions.get(flag, False):
-                    print(f"invalid flag: {flag}")
-                    return
+        def decorated_function(*args, **kwargs):
+            user_object: DoorUser = session.get("user_object", None)
+            if user_object is None:  # no user object inside the current session
+                raise DoorHTTPException.user_object_not_found()
+
+            if company_check:
+                company_role = user_object.permissions_in_selected_company()
+                if company_role == "none":  # user has no permissions for its selected company
+                    raise DoorHTTPException.permissions_not_found()
+
+                role_perm = role_permissions.get(company_role, {})
+                if not all(role_perm[perm] for perm in required_perm):
+                    raise DoorHTTPException.company_forbidden()
+
             return f(*args, **kwargs)
 
-        return wrapper
+        return decorated_function
 
-    return wrapper_function
+    return decorator
 
 
-# use decorators to link the function to a URL
+@app.errorhandler(DoorHTTPException)
+def handle_error(error):
+    return render_template("error.html", error=error)
+
+
+
 @app.route('/')
 @login_required
 def home():
-    query = db.select_all("user")
-    posts = [dict(id=row["userID"], name=row["name"], surname=row["surname"]) for row in query]
-    return render_template('home.html', posts=posts)  # render a template
+    roles = get_all_roles(db, session["user_object"].get_fiscal_code())
+    id_to_name = {d["cusID"]: d["name"] for d in roles}
+    return render_template('home.html', id_to_name=id_to_name)  # render a template
+
+
+@app.route("/homepage")
+@login_required
+def homepage():
+    return home()
+
+
+@app.route("/usrpanel")
+@login_required
+@required_permissions(("see_self_info",))
+def USR_panel():
+    return "Hello from the USR panel"
+
+
+@app.route("/copanel")
+@login_required
+@required_permissions(("see_self_info", "edit_company_USR", "see_as_USR"))
+def CO_panel():
+    return "Hello from the CO panel"
 
 
 @app.route('/welcome')
@@ -205,9 +247,56 @@ def login():
             return render_template("login.html")
         # qui la roba che succede se il login è giusto
         session["username"] = user
+        user_fiscal_code = get_id_from_user(db, user)
+        user_info = get_geninfo_from_user(db, user_fiscal_code)
+        session["user_object"] = DoorUser(
+            name=user_info["name"],
+            username=user,
+            fiscal_code=user_fiscal_code,
+            permissions={d["cusID"]: d["role"] for d in get_all_roles(db, user_fiscal_code)}
+        )
         return redirect(url_for("home"))
     else:
         return render_template("login.html")
+
+
+@app.route("/show_permissions", methods=["GET"])
+@login_required
+def show_permissions():
+    return render_template("permissions.html", perms=session["user_object"].get_permissions())
+
+
+@app.route("/show_dooruser", methods=["GET"])
+@login_required
+def show_dooruser():
+    return str(session["user_object"])
+
+
+@app.route("/mycompanies", methods=["GET"])
+@login_required
+def select_company():
+    user_roles = get_all_roles(db, session["user_object"].get_fiscal_code())
+    name_to_role = {d["name"]: d["role"] for d in user_roles}
+    name_to_id = {d["name"]: d["cusID"] for d in user_roles}
+    return render_template(
+        "mycompanies.html",
+        companies=name_to_role,
+        ids=name_to_id
+    )
+
+
+@app.route("/setcompany", methods=["POST"])
+@login_required
+def set_selected_company():
+    set_company = request.form["selected_company"]
+    if set_company not in session["user_object"].get_companies():
+        flash("Company not in user object")
+        return redirect(url_for("homepage"))
+    print("arrived here")
+    new_dooruser = session["user_object"]
+    new_dooruser.set_selected_company(set_company)
+    session["user_object"] = deepcopy(new_dooruser)
+    return redirect(url_for("homepage"))
 
 
 @app.route('/logout')
@@ -444,6 +533,6 @@ def create_user():
 
 if __name__ == '__main__':
     try:
-        app.run(host="192.168.43.56", port=5000, debug=True)
+        app.run(port=5000, debug=True)
     finally:
         scheduler.shutdown()

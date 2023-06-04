@@ -3,5 +3,10 @@ Client Errors
 460: generic failure of the request
 461: the client reached the server with a POST request, but the provided form is missing 1+ required key(s)
 
+465: no user object inside current session. Maybe something went wrong. Try to log out and log in again.
+
+470: invalid company permission level for the requested page.
+471: no permissions for selected company. Try selecting a different company, or ask an administrator.
+
 
 Server Errors

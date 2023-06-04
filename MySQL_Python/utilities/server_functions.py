@@ -20,6 +20,21 @@ def get_id_from_user(database: Database, user: str) -> str | None:
         return None
 
 
+def get_geninfo_from_user(database: Database, user: str) -> dict[str, str]:
+    query = database.select_where("user", "fiscal_code", user)
+    try:
+        geninfo = query[0]
+        return {
+            "name": geninfo["name"],
+            "surname": geninfo["surname"],
+            "email": geninfo["mail"],
+            "birthday": geninfo["birth_date"],
+            "gender": geninfo["gender"]
+        }
+    except (IndexError, KeyError):
+        return {}
+
+
 def get_role_from_ids(database: Database, user: str, company: str) -> str | None:
     query = database.select_wheres("user_to_customer", "cusID", company, "userID", user)
     try:
@@ -29,7 +44,9 @@ def get_role_from_ids(database: Database, user: str, company: str) -> str | None
 
 
 def get_all_roles(database: Database, user: str) -> list[dict]:
-    return database.select_join_where(("name", "role"), "user_to_customer", "customer", "cusID", "userID", user)
+    return database.select_join_where(
+        ("name", "role", "customer.cusID"), "user_to_customer", "customer", "cusID", "userID", user
+    )
 
 
 def validate_rfid_event(
