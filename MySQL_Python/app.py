@@ -5,7 +5,7 @@ from flask import Flask, render_template, url_for, request, redirect, \
 from functools import wraps
 from utilities.server_functions import get_user_password, password_verify, password_hash, validate_rfid_event, \
     get_role_from_ids, get_id_from_user, random_secure_password, date_to_str, validate_new_user_form, get_all_roles, \
-    get_geninfo_from_user
+    get_geninfo_from_user, get_user_from_email
 from utilities.database import Database
 from utilities.door_user import DoorUser, DoorUserSerializer
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -15,11 +15,32 @@ import time
 from datetime import datetime, timedelta
 import requests
 from copy import deepcopy
+from authlib.integrations.flask_client import OAuth
 
 # create the application object
 app = Flask(__name__)
 app.secret_key = os.getenv("door_secret")
 app.session_interface.serializer = DoorUserSerializer()
+
+google_client_id = os.getenv("GOOGLE_CLIENT_ID")
+google_client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+google_client_discovery = os.getenv("GOOGLE_CLIENT_DISCOVERY")
+
+oauth = OAuth(app)
+
+oauth.register(
+    name="google",
+    client_id="262572808873-4mj02tvnbe4bf4ik917902rcjpaag5nc.apps.googleusercontent.com",
+    client_secret="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",
+    access_token_url="https://accounts.google.com/o/oauth2/token",
+    access_token_params=None,
+    authorize_url="https://accounts.google.com/o/oauth2/auth",
+    authorize_params=None,
+    api_base_url="https://www.googleapis.com/oauth2/v1/",
+    userinfo_endpoint="https://openidconnect.googleapis.com/v1/userinfo",
+    server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
+    client_kwargs={"scope": "email profile"}
+)
 
 retry_seconds = 10
 while True:
@@ -94,7 +115,7 @@ scheduler.start()
 def login_required(f):
     @wraps(f)
     def wrap(*args, **kwargs):
-        if "username" in session:
+        if "user_object" in session:
             return f(*args, **kwargs)
         else:
             flash('You need to login first.')
@@ -131,6 +152,34 @@ def required_permissions(required_perm: tuple[str, ...], company_check: bool = T
 def handle_error(error):
     return render_template("error.html", error=error)
 
+
+@app.route('/google_login')
+def google_login():
+    redirect_uri = url_for('authorize', _external=True)
+    return oauth.google.authorize_redirect(redirect_uri)
+
+
+@app.route('/authorize')
+def authorize():
+    token = oauth.google.authorize_access_token()
+    resp = oauth.google.get('userinfo')
+    resp.raise_for_status()
+    profile = resp.json()
+    if "email" not in profile or not profile.get("verified_email", False):
+        raise DoorHTTPException.failed_google_auth()
+
+    user_data = get_user_from_email(db, profile["email"])
+    if not user_data:
+        raise DoorHTTPException.email_does_not_exist()
+    session["user_object"] = DoorUser(
+        name=user_data["name"],
+        username=user_data["username"],
+        fiscal_code=user_data["fiscal_code"],
+        permissions={d["cusID"]: d["role"] for d in get_all_roles(db, user_data["fiscal_code"])}
+    )
+
+    # do something with the token and profile
+    return redirect('/')
 
 
 @app.route('/')
@@ -247,7 +296,6 @@ def login():
             flash("Wrong password!")
             return render_template("login.html")
         # qui la roba che succede se il login è giusto
-        session["username"] = user
         user_fiscal_code = get_id_from_user(db, user)
         user_info = get_geninfo_from_user(db, user_fiscal_code)
         session["user_object"] = DoorUser(
@@ -303,7 +351,7 @@ def set_selected_company():
 @app.route('/logout')
 @login_required
 def logout():
-    session.pop("username", None)
+    session.clear()
     flash('You were just logged out!')
     return redirect(url_for('welcome'))
 
@@ -534,6 +582,6 @@ def create_user():
 
 if __name__ == '__main__':
     try:
-        app.run(port=5000, debug=True)
+        app.run(port=5000, debug=True, ssl_context="adhoc")
     finally:
         scheduler.shutdown()

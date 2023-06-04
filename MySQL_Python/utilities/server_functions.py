@@ -27,7 +27,7 @@ def get_geninfo_from_user(database: Database, user: str) -> dict[str, str]:
         return {
             "name": geninfo["name"],
             "surname": geninfo["surname"],
-            "email": geninfo["mail"],
+            "email": geninfo["email"],
             "birthday": geninfo["birth_date"],
             "gender": geninfo["gender"]
         }
@@ -47,6 +47,14 @@ def get_all_roles(database: Database, user: str) -> list[dict]:
     return database.select_join_where(
         ("name", "role", "customer.cusID"), "user_to_customer", "customer", "cusID", "userID", user
     )
+
+
+def get_user_from_email(database: Database, email: str) -> dict:
+    query = database.select_where("user", "email", email)
+    if len(query) != 1:
+        return {}
+    else:
+        return query[0]
 
 
 def validate_rfid_event(

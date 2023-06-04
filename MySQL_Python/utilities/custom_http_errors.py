@@ -32,3 +32,11 @@ class DoorHTTPException(HTTPException):
     @classmethod
     def permissions_not_found(cls):
         return cls(code=471, description="no permissions for selected company. Try selecting a different company, or contact your customer operator.")
+
+    @classmethod
+    def failed_google_auth(cls):
+        return cls(code=462, description="Failed Google Authentication.")
+
+    @classmethod
+    def email_does_not_exist(cls):
+        return cls(code=463, description="Email address does not exist.")
