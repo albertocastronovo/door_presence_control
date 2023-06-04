@@ -46,6 +46,7 @@ accepted_user_creations: dict[str, list[dict]] = {}
 rejected_user_creations: dict[str, list[dict]] = {}
 role_permissions: dict[str, dict[str, bool]] = {}
 
+
 """
     {
         "door_id":  dictionary with context (the company ID) and role, and info about time
