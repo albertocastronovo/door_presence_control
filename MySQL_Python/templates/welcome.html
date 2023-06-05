@@ -1,11 +1,7 @@
-<!DOCTYPE html>
-<html>
-  <head>
-    <title>DCS Welcome page</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link href="static/bootstrap.min.css" media="screen" rel="stylesheet">
-  </head>
-  <body>
+{% extends "base.html" %}
+
+{% block title %}DCS Welcome page{% endblock %}
+{% block content %}
     <div class="container">
       <h1>Door Control System</h1>
       <h2>WELCOME!</h2>
@@ -16,6 +12,5 @@
       {% endfor %}
       <p>Click <a href="/signup">here</a> to sign up.</p>
     </div>
-  </body>
-</html>
+{% endblock %}
 

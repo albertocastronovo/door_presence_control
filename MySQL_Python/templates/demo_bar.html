@@ -1,0 +1,12 @@
+{% if session["user_object"] != session["demo_object"] %}
+<div id="demo-bar">
+    You are navigating as {{ session["demo_object"].get_username() }}
+    <button onclick="stopImpersonation()">Stop Impersonating</button>
+</div>
+{% endif %}
+<script>
+    function stopImpersonation() {
+        window.location.href = "/stop_impersonation";
+    }
+</script>
+

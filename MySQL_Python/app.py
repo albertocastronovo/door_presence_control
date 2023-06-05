@@ -1,20 +1,58 @@
 # Import the Flask class and other extensions from the flask module
 
 from flask import Flask, render_template, url_for, request, redirect, \
-    session, flash, jsonify, abort
+    session, flash, jsonify
 from functools import wraps
 from utilities.server_functions import get_user_password, password_verify, password_hash, validate_rfid_event, \
-    get_role_from_ids, get_id_from_user, random_secure_password, date_to_str, validate_new_user_form, get_all_roles
+    get_role_from_ids, get_id_from_user, random_secure_password, date_to_str, validate_new_user_form, get_all_roles, \
+    get_geninfo_from_user, get_user_from_email, validate_impersonation, door_user_from_db
 from utilities.database import Database
+from utilities.door_user import DoorUser, DoorUserSerializer
 from apscheduler.schedulers.background import BackgroundScheduler
+from utilities.custom_http_errors import DoorHTTPException
 import os
 import time
 from datetime import datetime, timedelta
 import requests
+from copy import deepcopy
+from authlib.integrations.flask_client import OAuth
 
 # create the application object
 app = Flask(__name__)
 app.secret_key = os.getenv("door_secret")
+app.session_interface.serializer = DoorUserSerializer()
+google_client_id = os.getenv("GOOGLE_CLIENT_ID")
+google_client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+google_client_discovery = os.getenv("GOOGLE_CLIENT_DISCOVERY")
+facebook_client_id = os.getenv("FACEBOOK_CLIENT_ID")
+facebook_client_secret = os.getenv("FACEBOOK_CLIENT_SECRET")
+oauth = OAuth(app)
+
+oauth.register(
+    name="google",
+    client_id=google_client_id,
+    client_secret=google_client_secret,
+    access_token_url="https://accounts.google.com/o/oauth2/token",
+    access_token_params=None,
+    authorize_url="https://accounts.google.com/o/oauth2/auth",
+    authorize_params=None,
+    api_base_url="https://www.googleapis.com/oauth2/v1/",
+    userinfo_endpoint="https://openidconnect.googleapis.com/v1/userinfo",
+    server_metadata_url=google_client_discovery,
+    client_kwargs={"scope": "email profile"}
+)
+
+oauth.register(
+    name="facebook",
+    client_id=facebook_client_id,
+    client_secret=facebook_client_secret,
+    authorize_url="https://www.facebook.com/v17.0/dialog/oauth",
+    authorize_params=None,
+    access_token_url="https://graph.facebook.com/v17.0/oauth/access_token",
+    access_token_params=None,
+    api_base_url="https://graph.facebook.com/v17.0/",
+    client_kwargs={"scope": "email"}
+)
 
 retry_seconds = 10
 while True:
@@ -26,7 +64,7 @@ while True:
 
     db.connect_as(
         user="alberto",
-        password="alberto"
+        password="root"
     )
     if db.is_connected():
         print(f"Connected to database.")
@@ -34,24 +72,19 @@ while True:
     print(f"Could not connect to database. Retrying in {retry_seconds} seconds.")
     time.sleep(retry_seconds)
 
-print(get_all_roles(db, "RTN1234ECC"))
-
-users_permissions = {}
 pending_user_creations: dict[str, list[dict]] = {}
 accepted_user_creations: dict[str, list[dict]] = {}
 rejected_user_creations: dict[str, list[dict]] = {}
-
-"""
-    {
-        "door_id":  dictionary with context (the company ID) and role, and info about time
-                    
-    }
-"""
+role_permissions: dict[str, dict[str, bool]] = {}
 
 
 def update_users_permissions():
-    global users_permissions
-    users_permissions = {r["role"]: r for r in db.select_all("roles")}
+    role_data = db.select_all("roles")
+    for role in role_data:
+        role_permissions[role["name"]] = {k: v for k, v in role.items() if k != "name"}
+
+
+update_users_permissions()
 
 
 def reset_user_creations():
@@ -83,7 +116,7 @@ scheduler.start()
 def login_required(f):
     @wraps(f)
     def wrap(*args, **kwargs):
-        if "username" in session:
+        if "user_object" in session:
             return f(*args, **kwargs)
         else:
             flash('You need to login first.')
@@ -92,30 +125,160 @@ def login_required(f):
     return wrap
 
 
-def permissions_required(flag_list):
-    def wrapper_function(f):
+def required_permissions(required_perm: tuple[str, ...], company_check: bool = True, demo: bool = False):
+    def decorator(f):
         @wraps(f)
-        def wrapper(*args, **kwargs):
-            permissions = session["permissions"]
-            for flag in flag_list:
-                print(f"flag: {flag}")
-                if not permissions.get(flag, False):
-                    print(f"invalid flag: {flag}")
-                    return
+        def decorated_function(*args, **kwargs):
+            if demo:
+                user_object: DoorUser = session.get("demo_object", None)
+            else:
+                user_object: DoorUser = session.get("user_object", None)
+            if user_object is None:  # no user object inside the current session
+                raise DoorHTTPException.user_object_not_found()
+
+            if demo and (user_object.get_selected_company() != session["user_object"].get_selected_company()):
+                raise DoorHTTPException.clashing_selected_companies()
+
+            if company_check:
+                company_role = user_object.permissions_in_selected_company()
+                if company_role == "none":  # user has no permissions for its selected company
+                    raise DoorHTTPException.permissions_not_found()
+
+                role_perm = role_permissions.get(company_role, {})
+                if not all(role_perm[perm] for perm in required_perm):
+                    raise DoorHTTPException.company_forbidden()
+
             return f(*args, **kwargs)
 
-        return wrapper
+        return decorated_function
 
-    return wrapper_function
+    return decorator
 
 
-# use decorators to link the function to a URL
+@app.errorhandler(DoorHTTPException)
+def handle_error(error):
+    return render_template("error.html", error=error)
+
+
+@app.route('/login/google')
+def google_login():
+    redirect_uri = url_for('google_authorize', _external=True)
+    return oauth.google.authorize_redirect(redirect_uri)
+
+
+@app.route("/login/facebook")
+def facebook_login():
+    redirect_uri = url_for("facebook_authorize", _external=True)
+    return oauth.facebook.authorize_redirect(redirect_uri)
+
+
+@app.route('/authorize/google')
+def google_authorize():
+    token = oauth.google.authorize_access_token()
+    resp = oauth.google.get('userinfo')
+    resp.raise_for_status()
+    profile = resp.json()
+    if "email" not in profile or not profile.get("verified_email", False):
+        raise DoorHTTPException.failed_google_auth()
+
+    user_data = get_user_from_email(db, profile["email"])
+    if not user_data:
+        raise DoorHTTPException.email_does_not_exist()
+
+    user_object = DoorUser(
+        name=user_data["name"],
+        username=user_data["username"],
+        fiscal_code=user_data["fiscal_code"],
+        permissions={d["cusID"]: d["role"] for d in get_all_roles(db, user_data["fiscal_code"])}
+    )
+    session["user_object"] = user_object
+    session["demo_object"] = user_object
+
+    # do something with the token and profile
+    return redirect('/')
+
+
+@app.route("/authorize/facebook")
+def facebook_authorize():
+    token = oauth.facebook.authorize_access_token()
+    resp = oauth.facebook.get("https://graph.facebook.com/me?fields=id,name,email,picture{url}")
+    profile = resp.json()
+    print(f"Token: {token}\nProfile: {profile}")
+    return "OK"
+
+
 @app.route('/')
 @login_required
 def home():
-    query = db.select_all("user")
-    posts = [dict(id=row["userID"], name=row["name"], surname=row["surname"]) for row in query]
-    return render_template('home.html', posts=posts)  # render a template
+    roles = get_all_roles(db, session["demo_object"].get_fiscal_code())
+    id_to_name = {d["cusID"]: d["name"] for d in roles}
+    return render_template('home.html', id_to_name=id_to_name)  # render a template
+
+
+@app.route("/homepage")
+@login_required
+def homepage():
+    return home()
+
+
+@app.route("/impersonate", methods=["GET", "POST"])
+@login_required
+def impersonate():
+    if request.method == "GET":
+        return render_template("impersonate.html")
+    else:
+        if session["demo_object"] != session["user_object"]:
+            return render_template("impersonate.html", error_msg="Origin user is already impersonating someone.")
+
+        if "fiscal_code" not in request.form:
+            return render_template("impersonate.html", error_msg="Invalid form!")
+        status, err_msg = validate_impersonation(
+            db,
+            session["demo_object"].get_fiscal_code(),
+            request.form["fiscal_code"],
+            session["demo_object"].get_selected_company()
+        )
+
+        if not status:
+            return render_template("impersonate.html", error_msg=err_msg)
+        session["demo_object"] = door_user_from_db(db, request.form["fiscal_code"])
+        session["demo_object"].set_selected_company(session["user_object"].get_selected_company())
+        flash("Impersonation successful.")
+        return redirect(url_for("welcome"))
+
+
+@app.route("/stop_impersonation")
+@login_required
+def stop_impersonation():
+    session["demo_object"] = deepcopy(session["user_object"])
+    flash("Impersonation terminated.")
+    return redirect(url_for("welcome"))
+
+
+@app.route("/viewusers")
+@login_required
+def view_session_users():
+    return render_template("view_session_users.html")
+
+
+@app.route("/testimpersonation")
+@login_required
+def test_impersonation():
+    return render_template("impersonation_test.html")
+
+
+@app.route("/usrpanel")
+@login_required
+@required_permissions(("see_self_info",))
+def USR_panel():
+    return "Hello from the USR panel"
+
+
+@app.route("/copanel")
+@login_required
+@required_permissions(("see_self_info", "edit_company_USR", "see_as_USR"))
+def CO_panel():
+    return "Hello from the CO panel"
 
 
 @app.route('/welcome')
@@ -204,16 +367,68 @@ def login():
             flash("Wrong password!")
             return render_template("login.html")
         # qui la roba che succede se il login è giusto
-        session["username"] = user
+        user_fiscal_code = get_id_from_user(db, user)
+        user_info = get_geninfo_from_user(db, user_fiscal_code)
+        user_object = DoorUser(
+            name=user_info["name"],
+            username=user,
+            fiscal_code=user_fiscal_code,
+            permissions={d["cusID"]: d["role"] for d in get_all_roles(db, user_fiscal_code)}
+        )
+        session["user_object"] = user_object
+        session["demo_object"] = user_object
+
         return redirect(url_for("home"))
     else:
         return render_template("login.html")
 
 
+@app.route("/show_permissions", methods=["GET"])
+@login_required
+def show_permissions():
+    return render_template("permissions.html", perms=session["demo_object"].get_permissions())
+
+
+@app.route("/show_dooruser", methods=["GET"])
+@login_required
+def show_dooruser():
+    return str(session["user_object"])
+
+
+@app.route("/mycompanies", methods=["GET"])
+@login_required
+def select_company():
+    user_roles = get_all_roles(db, session["demo_object"].get_fiscal_code())
+    name_to_role = {d["name"]: d["role"] for d in user_roles}
+    name_to_id = {d["name"]: d["cusID"] for d in user_roles}
+    return render_template(
+        "mycompanies.html",
+        companies=name_to_role,
+        ids=name_to_id,
+        error_msg=request.args.get("error_msg", None)
+    )
+
+
+@app.route("/setcompany", methods=["POST"])
+@login_required
+def set_selected_company():
+    if session["demo_object"] != session["user_object"]:
+        error_msg = "You cannot change the selected company while impersonating another user."
+        return redirect(url_for("select_company", error_msg=error_msg))
+    set_company = request.form["selected_company"]
+    if set_company not in session["user_object"].get_companies():
+        flash("Company not in user object")
+        return redirect(url_for("homepage"))
+    new_dooruser = session["user_object"]
+    new_dooruser.set_selected_company(set_company)
+    session["user_object"] = deepcopy(new_dooruser)
+    return redirect(url_for("homepage"))
+
+
 @app.route('/logout')
 @login_required
 def logout():
-    session.pop("username", None)
+    session.clear()
     flash('You were just logged out!')
     return redirect(url_for('welcome'))
 
@@ -444,6 +659,6 @@ def create_user():
 
 if __name__ == '__main__':
     try:
-        app.run(host="192.168.43.56", port=5000, debug=True)
+        app.run(port=5000, debug=True, ssl_context="adhoc")
     finally:
         scheduler.shutdown()

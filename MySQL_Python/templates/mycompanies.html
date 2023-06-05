@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}My Companies{% endblock %}
+      {% block extra_styles %}
+    <style>
+      table {
+        border-collapse: collapse;
+        width: 100%;
+      }
+      th, td {
+        text-align: left;
+        padding: 8px;
+      }
+      tr:nth-child(even) {
+        background-color: #f2f2f2;
+      }
+      th {
+        background-color: #4CAF50;
+        color: white;
+      }
+      a {
+        color: #0000EE;
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      .error {
+        color: red;
+        font-weight: bold;
+      }
+    </style>
+      {% endblock %}
+
+  {% block content %}
+
+      {% if error_msg %}
+<p style="color:red">{{ error_msg }}</p>
+{% endif %}
+    {% if companies|length == 0 %}
+    <p class="error">No companies found.</p>
+    {% else %}
+    <h1>My Companies</h1>
+    <table>
+      <tr>
+        <th>Company</th>
+        <th>Position</th>
+      </tr>
+      {% for company, position in companies.items() %}
+      <tr>
+        <td><a href="{{ url_for('home', company_id=ids[company]) }}" onclick="event.preventDefault(); document.getElementById('select-company-form-{{ company}}').submit();">{{ company }}</a></td>
+        <td>{{ position }}</td>
+      </tr>
+      <form id="select-company-form-{{ company }}" action="{{ url_for('set_selected_company') }}" method="POST">
+        <input type="hidden" name="selected_company" value="{{ ids[company] }}">
+      </form>
+      {% endfor %}
+    </table>
+    {% endif %}
+  {% endblock %}

@@ -1,27 +1,38 @@
-<!DOCTYPE html>
-<html>
-  <head>
-    <title>DCS Homepage</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link href="static/bootstrap.min.css" rel="stylesheet" media="screen">
-  </head>
-  <body>
-    <div class="container">
-      <h1>Door Control System</h1>
-      <h1>Home Page</h1>
-      <br>
-      <p>Click <a href="/logout">here</a> to logout.</p>
-      <br><br>
-      <h3>User:</h3>
-      {%for post in posts%}
-        <strong>ID:</strong> {{ post.id }} <br>
-        <strong>Name:</strong> {{ post.name }} <br>
-        <strong>Surname:</strong> {{ post.surname }} <br>
-      <br>
-      {% endfor %}
-      {% for message in get_flashed_messages() %}
-        {{message}}
-      {% endfor %}
-    </div>
-  </body>
-</html>
+{% extends "base.html" %}
+
+{% block title %}Door Control System{% endblock %}
+
+{% block content %}
+    <h1>Welcome, {{ session["demo_object"].get_name() }}</h1>
+    <p>Selected company: {{ id_to_name.get(session["demo_object"].get_selected_company(), "none yet!") }}</p>
+
+    <form action="/mycompanies">
+      <button type="submit">Change company</button>
+    </form>
+
+    <form action="/show_permissions">
+      <button type="submit">My companies</button>
+    </form>
+
+    {% set user_permissions = session["demo_object"].permissions_in_selected_company() %}
+
+    {% if user_permissions == "SA" %}
+      <form action="/sa_panel">
+        <button type="submit">Control panel</button>
+      </form>
+    {% elif user_permissions == "CA" %}
+      <form action="/ca_panel">
+        <button type="submit">Control panel</button>
+      </form>
+    {% elif user_permissions == "CO" %}
+      <form action="/co_panel">
+        <button type="submit">Control panel</button>
+      </form>
+    {% elif user_permissions == "USR" %}
+      <form action="/usr_panel">
+        <button type="submit">Control panel</button>
+      </form>
+    {% else %}
+      <p>You do not have permission to access the control panel.</p>
+    {% endif %}
+{% endblock %}
