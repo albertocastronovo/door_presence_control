@@ -22,6 +22,10 @@
       {% for message in get_flashed_messages() %}
         {{message}}
       {% endfor %}
+
+    <h2>Google Authentication</h2>
+	<p>Please click the button below to authenticate with Google:</p>
+	<a href="{{ url_for('google_login') }}"><button>Authenticate with Google</button></a>
     </div>
   </body>
 </html>

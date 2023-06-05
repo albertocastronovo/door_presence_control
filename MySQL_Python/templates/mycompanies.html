@@ -1,7 +1,7 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <title>My Companies</title>
+{% extends "base.html" %}
+
+{% block title %}My Companies{% endblock %}
+      {% block extra_styles %}
     <style>
       table {
         border-collapse: collapse;
@@ -30,8 +30,13 @@
         font-weight: bold;
       }
     </style>
-  </head>
-  <body>
+      {% endblock %}
+
+  {% block content %}
+
+      {% if error_msg %}
+<p style="color:red">{{ error_msg }}</p>
+{% endif %}
     {% if companies|length == 0 %}
     <p class="error">No companies found.</p>
     {% else %}
@@ -52,5 +57,4 @@
       {% endfor %}
     </table>
     {% endif %}
-  </body>
-</html>
+  {% endblock %}

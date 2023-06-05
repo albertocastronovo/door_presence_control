@@ -40,3 +40,7 @@ class DoorHTTPException(HTTPException):
     @classmethod
     def email_does_not_exist(cls):
         return cls(code=463, description="Email address does not exist.")
+
+    @classmethod
+    def clashing_selected_companies(cls):
+        return cls(code=464, description="Selected company in demo user does not match that of main user")

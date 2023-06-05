@@ -37,6 +37,9 @@ class DoorUser:
     def get_name(self) -> str:
         return self.__name
 
+    def get_username(self) -> str:
+        return self.__username
+
     def get_companies(self) -> list[str]:
         return list(self.__permissions.keys())
 
@@ -48,6 +51,11 @@ class DoorUser:
 
     def __repr__(self):
         return "repr of DoorUser"
+
+    def __eq__(self, other):
+        if isinstance(other, DoorUser):
+            return self.__fiscal_code == other.get_fiscal_code()
+        return False
 
     def __str__(self):
         return dedent(f"""\

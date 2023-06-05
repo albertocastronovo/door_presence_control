@@ -1,11 +1,10 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <title>Door Control System</title>
-  </head>
-  <body>
-    <h1>Welcome, {{ session["user_object"].get_name() }}</h1>
-    <p>Selected company: {{ id_to_name.get(session["user_object"].get_selected_company(), "none yet!") }}</p>
+{% extends "base.html" %}
+
+{% block title %}Door Control System{% endblock %}
+
+{% block content %}
+    <h1>Welcome, {{ session["demo_object"].get_name() }}</h1>
+    <p>Selected company: {{ id_to_name.get(session["demo_object"].get_selected_company(), "none yet!") }}</p>
 
     <form action="/mycompanies">
       <button type="submit">Change company</button>
@@ -15,7 +14,7 @@
       <button type="submit">My companies</button>
     </form>
 
-    {% set user_permissions = session["user_object"].permissions_in_selected_company() %}
+    {% set user_permissions = session["demo_object"].permissions_in_selected_company() %}
 
     {% if user_permissions == "SA" %}
       <form action="/sa_panel">
@@ -36,5 +35,4 @@
     {% else %}
       <p>You do not have permission to access the control panel.</p>
     {% endif %}
-  </body>
-</html>
+{% endblock %}

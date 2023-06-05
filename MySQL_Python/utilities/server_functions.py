@@ -2,6 +2,7 @@ from MySQL_Python.utilities.database import Database
 from .time_functions import time_validation, date_to_str
 from .password_functions import *
 from .data_validation import validate_data
+from .door_user import DoorUser
 
 
 def get_user_password(database: Database, user: str) -> str | None:
@@ -49,12 +50,53 @@ def get_all_roles(database: Database, user: str) -> list[dict]:
     )
 
 
+def get_demo_users(database: Database, user: str, role: str, company: str) -> list[dict]:
+    pass
+
+
+def validate_impersonation(database: Database, user_me: str, user_to_impersonate: str, selected_company: str) -> tuple[bool, str]:
+    # check #1: origin and target user exist in database
+    user_origin = door_user_from_db(database, user_me)
+    user_target = door_user_from_db(database, user_to_impersonate)
+    if user_origin is None or user_target is None:
+        return False, "Origin or target user do not exist in database."
+
+    # check #2: origin and target are both registered in origin's selected company
+    user_1_in_company = get_role_from_ids(database, user_me, selected_company)
+    user_2_in_company = get_role_from_ids(database, user_to_impersonate, selected_company)
+    if user_1_in_company is None or user_2_in_company is None:
+        return False, "Origin or target user is not registered to the selected company."
+
+    # check #3: origin role can impersonate target role
+    if user_1_in_company == "USR" or \
+        user_1_in_company == "CO" and user_2_in_company not in ["USR", "CO"] or \
+            user_1_in_company == "CA" and user_2_in_company not in ["USR", "CO", "CA"]:
+        return False, "Origin user does not have permissions to impersonate target."
+    return True, "Successfully impersonated."
+
+
 def get_user_from_email(database: Database, email: str) -> dict:
     query = database.select_where("user", "email", email)
     if len(query) != 1:
         return {}
     else:
         return query[0]
+
+
+def door_user_from_db(database: Database, user: str) -> DoorUser | None:
+    user_info = database.select_where("user", "fiscal_code", user)
+    if len(user_info) != 1:
+        return None
+    try:
+        user_info = user_info[0]
+        return DoorUser(
+            name=user_info["name"],
+            username=user_info["username"],
+            fiscal_code=user_info["fiscal_code"],
+            permissions={d["cusID"]: d["role"] for d in get_all_roles(database, user_info["fiscal_code"])}
+        )
+    except KeyError:
+        return None
 
 
 def validate_rfid_event(
