@@ -87,47 +87,49 @@ def permissions_required(flag_list):
 
 
 # use decorators to link the function to a URL
-@app.route('/')
-@login_required
-def home():
-    query = db.select_all("user")
-    posts = [dict(id=row["userID"], name=row["name"], surname=row["surname"]) for row in query]
-    return render_template('home.html', posts=posts)  # render a template
+# @app.route('/')
+# @login_required
+# def home():
+#     query = db.select_all("user")
+#     posts = [dict(id=row["userID"], name=row["name"], surname=row["surname"]) for row in query]
+#     return render_template('home.html', posts=posts)  # render a template
+#
+#
+# @app.route('/welcome')
+# def welcome():
+#     return render_template("welcome.html")  # render a template
 
 
-@app.route('/welcome')
-def welcome():
-    return render_template("welcome.html")  # render a template
-
-
-@app.route('/signup', methods=['GET', 'POST'])
+@app.route('/signup', methods=['POST'])
 def signup():
-    # print(request.method)
-    if request.method == 'POST':
-        user = request.form["username"]
-        saved_hash = get_user_password(db, user)
-        user_pw = request.form["password"]
-        is_correct = password_verify(user_pw, saved_hash)
-        if not is_correct or saved_hash is None:
-            flash("The selected employee does not have those access permissions.")
-            return render_template("signup.html")
-        session["username"] = user
-        flash("more fields to write")
-        return render_template("signup.html")
-    else:
-        return render_template("signup.html")
-
-
-@app.route('/check_auth', methods=['POST'])
-def check_auth():
-    user = request.form["username"]
+    user = request.json["username"]
+    print(user)
     saved_hash = get_user_password(db, user)
-    user_pw = request.form["password"]
+    if saved_hash is None:
+        return jsonify({"exists": False, "registered": False})
+    user_pw = request.json["password"]
+    print(user_pw)
     is_correct = password_verify(user_pw, saved_hash)
-    if not is_correct or saved_hash is None:
-        return jsonify({"error": "The selected employee does not have those access permissions."}), 401
+    if not is_correct:
+        return jsonify({"exists": False, "registered": False})
+    flag_psw = db.select_col_where("user", "flag_password_changed", "username", user)[0]["flag_password_changed"]
+    print(flag_psw)
+    if flag_psw == 0:
+        return jsonify({"exists": True, "registered": False})
     session["username"] = user
-    return jsonify({"message": "Authenticated successfully"})
+    return jsonify({"exists": True, "registered": True})
+
+
+# @app.route('/check_auth', methods=['POST'])
+# def check_auth():
+#     user = request.form["username"]
+#     saved_hash = get_user_password(db, user)
+#     user_pw = request.form["password"]
+#     is_correct = password_verify(user_pw, saved_hash)
+#     if not is_correct or saved_hash is None:
+#         return jsonify({"error": "The selected employee does not have those access permissions."}), 401
+#     session["username"] = user
+#     return jsonify({"message": "Authenticated successfully"})
 
 
 @app.route('/update_user', methods=['POST'])
@@ -179,10 +181,8 @@ def login():
         "company": "COMPANY",
         "role": "ROLE"
     }
-    # gestire errori se il form è incompleto (non c'è l'utente, la password...)
     saved_hash = get_user_password(db, user)
     if saved_hash is None:
-        # gestire errore se l'utente è sbagliato (non esiste)
         return jsonify({"exists": False}, {"registered": False}, roles)
     user_pw = request.json["password"]
     is_correct = password_verify(user_pw, saved_hash)
@@ -192,18 +192,11 @@ def login():
     print(flag_psw)
     if flag_psw == 0:
         return jsonify({"exists": True}, {"registered": False}, roles)
-    # qui la roba che succede se il login è giusto
     session["username"] = user
-    roles = log_to_page(user)
-    print(roles)
-    return jsonify({"exists": True}, {"registered": True}, roles)
-
-
-
-def log_to_page(user):
     fiscal_code = get_id_from_user(db, user)
     roles = get_all_roles(db, fiscal_code)
-    return roles
+    print(roles)
+    return jsonify({"exists": True}, {"registered": True}, roles)
 
 
 @app.route('/logout')
