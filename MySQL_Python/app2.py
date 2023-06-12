@@ -134,14 +134,14 @@ def signup():
 
 @app.route('/update_user', methods=['POST'])
 def update_user():
-    username = request.form["username"]
-    prefix = request.form["prefix"]
-    phone_number = request.form["phone_number"]
-    email = request.form["email"]
-    address = request.form["address"]
-    birth_date = request.form["birth_date"]
-    gender = request.form["gender"]
-    new_password = request.form["new_password"]
+    username = request.json["username"]
+    prefix = request.json["prefix"]
+    phone_number = request.json["phone_number"]
+    email = request.json["email"]
+    address = request.json["address"]
+    birth_date = request.json["birth_date"]
+    gender = request.json["gender"]
+    new_password = request.json["new_password"]
 
     print(username)
     print(new_password)
@@ -178,8 +178,9 @@ def check_username():
 def login():
     user = request.json["username"]
     roles = {
-        "company": "COMPANY",
-        "role": "ROLE"
+        "name": "COMPANY",
+        "role": "ROLE",
+        "cusID": "CUSID"
     }
     saved_hash = get_user_password(db, user)
     if saved_hash is None:
