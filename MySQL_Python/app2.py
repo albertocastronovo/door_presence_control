@@ -1,6 +1,6 @@
 # Import the Flask class and other extensions from the flask module
 from flask import Flask, render_template, url_for, request, redirect, \
-    session, flash, jsonify  # ,abort
+    session, flash, jsonify, g  # ,abort
 from functools import wraps
 from pytz_deprecation_shim import PytzUsageWarning
 from utilities.server_functions import get_user_password, password_verify, password_hash, validate_rfid_event, \
@@ -18,6 +18,9 @@ warnings.filterwarnings("ignore", category=PytzUsageWarning)
 app = Flask(__name__)
 # app.secret_key = os.getenv("door_secret")
 app.secret_key = "SUPER SECRET KEY"
+
+# Set session to be permanent and set its lifetime
+app.permanent_session_lifetime = timedelta(minutes=10)
 
 db = Database(
     host="localhost",
@@ -82,8 +85,14 @@ def permissions_required(flag_list):
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
     if request.method == 'POST':
+        print(request.method)
+        session.pop("username", None)
         user = request.json["username"]
         print(user)
+        session["username"] = user
+        session.permanent = True  # Set session to be permanent
+        print(session)
+        print(session["username"])
         saved_hash = get_user_password(db, user)
         if saved_hash is None:
             return jsonify({"exists": False, "registered": False})
@@ -96,55 +105,71 @@ def signup():
         print(flag_psw)
         if flag_psw == 0:
             return jsonify({"exists": True, "registered": False})
-        session["username"] = user
         return jsonify({"exists": True, "registered": True})
 
     else:
+        print(request.method)
         if "username" in session:
-            user = session["username"]
+            username = session["username"]
+            g.username = username
             # Altre operazioni per il metodo GET
-            return jsonify({"username": user})
+            return jsonify({"username": username})
         else:
             # Altre operazioni per il metodo GET quando la sessione non contiene "username"
             return jsonify({"error": "Session username not found"})
 
 
+@app.before_request
+def before_request():
+    if 'username' in session:
+        username = session['username']
+        g.username = username
+        print(username)
+        session.permanent = True  # Set session to be permanent
+    else:
+        g.username = None
+
+
 @app.route('/update_user', methods=['POST'])
+#@app.before_request
 def update_user():
+    if g.username:
+        username = g.username
 
-    print(session)
-    username = session["username"]
-    user = request.json["username"]
-    prefix = request.json["prefix"]
-    phone_number = request.json["phone_number"]
-    email = request.json["email"]
-    address = request.json["address"]
-    birth_date = request.json["birth_date"]
-    gender = request.json["gender"]
-    new_password = request.json["new_password"]
+        user = request.json["username"]
+        prefix = request.json["prefix"]
+        phone_number = request.json["phone_number"]
+        email = request.json["email"]
+        address = request.json["address"]
+        birth_date = request.json["birth_date"]
+        gender = request.json["gender"]
+        new_password = request.json["new_password"]
 
-    print(username)
-    print(user)
-    print(new_password)
-    print(prefix + phone_number)
-    print(email)
-    print(address)
-    print(birth_date)
-    print(gender)
+        print(username)
+        print(user)
+        print(new_password)
+        print(prefix + phone_number)
+        print(email)
+        print(address)
+        print(birth_date)
+        print(gender)
 
-    update = db.update_multiple(
-        table="user",
-        column_names=["username", "password", "phone_number", "mail", "address", "birth_date", "gender",
-                      "flag_phone", "flag_mail", "flag_password_changed"],
-        column_values=[user, password_hash(new_password), prefix + phone_number, email, address, birth_date,
-                       gender, 1, 1, 1],
-        where_column="fiscal_code",
-        where_value=username
-        # where_value="FISCALCODE"
-    )
-    # Check if there is another person with the same username --> check_username()
+        update = db.update_multiple(
+            table="user",
+            column_names=["username", "password", "phone_number", "mail", "address", "birth_date", "gender",
+                          "flag_phone", "flag_mail", "flag_password_changed"],
+            column_values=[user, password_hash(new_password), prefix + phone_number, email, address, birth_date,
+                           gender, 1, 1, 1],
+            where_column="fiscal_code",
+            where_value=username
+            # where_value="FISCALCODE"
+        )
+        # Check if there is another person with the same username --> check_username()
 
-    return jsonify({"status": "success", "message": "User information updated successfully!"})
+        return jsonify({"status": "success", "message": "User information updated successfully!"})
+
+    else:
+        return jsonify({"error": "Session username not found"})
 
 
 # --> here
