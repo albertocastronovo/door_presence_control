@@ -175,9 +175,11 @@ class Database:
         param_tuple = param_tuple_1 + param_tuple_2
         try:
             self.__execute_query(query, param_tuple)
-            return 0
-        except:
-            return -1
+            #return 0
+            return {"status": "success", "message": "Update successful"}
+        except Exception as e:
+            #return -1
+            return {"status": "error", "message": str(e)}
 
     def update_multiple_wheres(
             self,
