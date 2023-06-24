@@ -145,6 +145,40 @@ class Database:
                 f"WHERE {table_1}.{col_where} = %s"
         return self.__execute_query(query, (col_value,))
 
+    def select_subquery(
+            self,
+            table_data: str,
+            col_join_1: str,
+            col_join_2: str,
+            table_join: str,
+            col_where: str,
+            where_value: str,
+            order_by: str | None = None,
+            offset: int | None = None,
+            limit: int | None = None,
+            count_only: bool = False
+    ):
+        if count_only:
+            query = "SELECT COUNT(*)\n"
+        else:
+            query = "SELECT *\n"
+        query += f"""\
+            FROM {table_data}
+            WHERE {col_join_1} IN (
+                SELECT {col_join_2}
+                FROM {table_join}
+                WHERE {col_where} = %s
+            )
+        """
+        if order_by is not None:
+            query += f" ORDER BY {order_by}"
+        if limit is not None:
+            query += f" LIMIT {limit}"
+        if offset is not None:
+            query += f" OFFSET {offset}"
+            print(f"Query: {query}")
+        return self.__execute_query(query, (where_value,))
+
     def update(
             self,
             table: str,

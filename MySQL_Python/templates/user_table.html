@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>User Table</title>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+  <form id="filter-form">
+    <label for="email">Email:</label>
+    <input type="text" name="email" id="email">
+    <label for="name">Name:</label>
+    <input type="text" name="name" id="name">
+    <label for="surname">Surname:</label>
+    <input type="text" name="surname" id="surname">
+    <label for="username">Username:</label>
+    <input type="text" name="username" id="username">
+    <label for="gender">Gender:</label>
+    <input type="text" name="gender" id="gender">
+    <label for="birth_date">Birth Date:</label>
+    <input type="date" name="birth_date" id="birth_date">
+    <label for="user_company">User Company:</label>
+    <input type="text" name="user_company" id="user_company">
+    <button type="submit">Apply Filters</button>
+  </form>
+  <br>
+  <label for="rows-per-page">Rows per page:</label>
+  <select id="rows-per-page">
+    <option value="10">10</option>
+    <option value="25">25</option>
+    <option value="50">50</option>
+    <option value="100">100</option>
+  </select>
+  <br>
+  <br>
+  <table id="user-table">
+    <thead>
+      <tr>
+        <th>Email</th>
+        <th>Name</th>
+        <th>Surname</th>
+        <th>Username</th>
+        <th>Gender</th>
+        <th>Birth Date</th>
+        <th>User Company</th>
+      </tr>
+    </thead>
+    <tbody>
+    </tbody>
+  </table>
+  <br>
+  <div id="pagination">
+    <button id="previous-page">&lt; Previous</button>
+    <span>Page <span id="current-page"></span> of <span id="total-pages"></span></span>
+    <button id="next-page">Next &gt;</button>
+  </div>
+  <script src="{{ url_for('static', filename='js/table.js') }}"></script>
+</body>
+</html>

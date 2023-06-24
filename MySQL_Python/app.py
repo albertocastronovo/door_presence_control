@@ -1,8 +1,5 @@
-# Import the Flask class and other extensions from the flask module
-
 from flask import Flask, render_template, url_for, request, redirect, \
     session, flash, jsonify
-from functools import wraps
 from utilities.server_functions import get_user_password, password_verify, password_hash, validate_rfid_event, \
     get_role_from_ids, get_id_from_user, random_secure_password, date_to_str, validate_new_user_form, get_all_roles, \
     get_geninfo_from_user, get_user_from_email, validate_impersonation, door_user_from_db
@@ -15,44 +12,16 @@ import time
 from datetime import datetime, timedelta
 import requests
 from copy import deepcopy
-from authlib.integrations.flask_client import OAuth
+from auth.auth import oauth_init
+from decorators.user_checks import login_required, required_permissions, role_permissions
 
 # create the application object
 app = Flask(__name__)
 app.secret_key = os.getenv("door_secret")
 app.session_interface.serializer = DoorUserSerializer()
-google_client_id = os.getenv("GOOGLE_CLIENT_ID")
-google_client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
-google_client_discovery = os.getenv("GOOGLE_CLIENT_DISCOVERY")
-facebook_client_id = os.getenv("FACEBOOK_CLIENT_ID")
-facebook_client_secret = os.getenv("FACEBOOK_CLIENT_SECRET")
-oauth = OAuth(app)
 
-oauth.register(
-    name="google",
-    client_id=google_client_id,
-    client_secret=google_client_secret,
-    access_token_url="https://accounts.google.com/o/oauth2/token",
-    access_token_params=None,
-    authorize_url="https://accounts.google.com/o/oauth2/auth",
-    authorize_params=None,
-    api_base_url="https://www.googleapis.com/oauth2/v1/",
-    userinfo_endpoint="https://openidconnect.googleapis.com/v1/userinfo",
-    server_metadata_url=google_client_discovery,
-    client_kwargs={"scope": "email profile"}
-)
+oauth = oauth_init(app)
 
-oauth.register(
-    name="facebook",
-    client_id=facebook_client_id,
-    client_secret=facebook_client_secret,
-    authorize_url="https://www.facebook.com/v17.0/dialog/oauth",
-    authorize_params=None,
-    access_token_url="https://graph.facebook.com/v17.0/oauth/access_token",
-    access_token_params=None,
-    api_base_url="https://graph.facebook.com/v17.0/",
-    client_kwargs={"scope": "email"}
-)
 
 retry_seconds = 10
 while True:
@@ -75,7 +44,6 @@ while True:
 pending_user_creations: dict[str, list[dict]] = {}
 accepted_user_creations: dict[str, list[dict]] = {}
 rejected_user_creations: dict[str, list[dict]] = {}
-role_permissions: dict[str, dict[str, bool]] = {}
 
 
 def update_users_permissions():
@@ -110,49 +78,6 @@ scheduler.add_job(      # clear RFID mode user creation dictionaries at 3 AM eve
     hour=3
 )
 scheduler.start()
-
-
-# login required decorator
-def login_required(f):
-    @wraps(f)
-    def wrap(*args, **kwargs):
-        if "user_object" in session:
-            return f(*args, **kwargs)
-        else:
-            flash('You need to login first.')
-            return redirect(url_for('login'))
-
-    return wrap
-
-
-def required_permissions(required_perm: tuple[str, ...], company_check: bool = True, demo: bool = False):
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            if demo:
-                user_object: DoorUser = session.get("demo_object", None)
-            else:
-                user_object: DoorUser = session.get("user_object", None)
-            if user_object is None:  # no user object inside the current session
-                raise DoorHTTPException.user_object_not_found()
-
-            if demo and (user_object.get_selected_company() != session["user_object"].get_selected_company()):
-                raise DoorHTTPException.clashing_selected_companies()
-
-            if company_check:
-                company_role = user_object.permissions_in_selected_company()
-                if company_role == "none":  # user has no permissions for its selected company
-                    raise DoorHTTPException.permissions_not_found()
-
-                role_perm = role_permissions.get(company_role, {})
-                if not all(role_perm[perm] for perm in required_perm):
-                    raise DoorHTTPException.company_forbidden()
-
-            return f(*args, **kwargs)
-
-        return decorated_function
-
-    return decorator
 
 
 @app.errorhandler(DoorHTTPException)
@@ -267,6 +192,53 @@ def test_impersonation():
     return render_template("impersonation_test.html")
 
 
+@app.route("/testpanel", methods=["GET"])
+@login_required
+def test_panel():
+    return render_template("user_table.html")
+
+
+@app.route("/users_for_table", methods=["GET"])
+def get_users_for_table():
+    page = int(request.args.get("page", 1))
+    per_page = int(request.args.get("per_page", 10))
+    filters = request.args.get("filters", None)
+
+    # apply filters to query
+
+    order_by = request.args.get("order_by", None)
+
+    # do stuff with order by
+
+    total_pages = int(db.select_subquery(
+        table_data="user",
+        col_join_1="fiscal_code",
+        col_join_2="userID",
+        table_join="user_to_customer",
+        col_where="cusID",
+        where_value=session["demo_object"].get_selected_company(),
+        count_only=True
+    )[0]["COUNT(*)"]) // per_page + 1
+    print(total_pages)
+    users = db.select_subquery(
+        table_data="user",
+        col_join_1="fiscal_code",
+        col_join_2="userID",
+        table_join="user_to_customer",
+        col_where="cusID",
+        where_value=session["demo_object"].get_selected_company(),
+        order_by=order_by,
+        limit=per_page,
+        offset=per_page*(page-1)
+    )
+    print(users)
+
+    return jsonify({
+        "users": users,
+        "total_pages": total_pages
+    })
+
+
 @app.route("/usrpanel")
 @login_required
 @required_permissions(("see_self_info",))
@@ -276,9 +248,23 @@ def USR_panel():
 
 @app.route("/copanel")
 @login_required
-@required_permissions(("see_self_info", "edit_company_USR", "see_as_USR"))
+@required_permissions(("see_self_info", "edit_company_USR", "see_as_USR", "see_as_CO"))
 def CO_panel():
     return "Hello from the CO panel"
+
+
+@app.route("/capanel")
+@login_required
+@required_permissions(("see_self_info", "edit_company_USR", "see_as_USR", "edit_company_CO", "see_as_CA"))
+def CA_panel():
+    return "Hello from the CA panel"
+
+
+@app.route("/sapanel")
+@login_required
+@required_permissions(("admin",))
+def SA_panel():
+    return "Hello from the SA panel"
 
 
 @app.route('/welcome')
