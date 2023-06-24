@@ -86,7 +86,7 @@ def permissions_required(flag_list):
 def signup():
     if request.method == 'POST':
         print(request.method)
-        session.pop("username", None)
+        # session.pop("username", None)
         user = request.json["username"]
         print(user)
         session["username"] = user
@@ -129,9 +129,10 @@ def before_request():
     else:
         g.username = None
 
+    # return g.username
+
 
 @app.route('/update_user', methods=['POST'])
-#@app.before_request
 def update_user():
     if g.username:
         username = g.username
@@ -172,15 +173,85 @@ def update_user():
         return jsonify({"error": "Session username not found"})
 
 
-# --> here
-@app.route('/check_username', methods=['POST'])
-def check_username():
-    username = request.form["username"]
-    saved_hash = get_user_password(db, username)
-    if saved_hash is not None:
-        return jsonify({"exists": True})
-    return jsonify({"exists": False})
+#
+# # --> here
+# @app.route('/check_username', methods=['POST'])
+# def check_username():
+#     username = request.form["username"]
+#     saved_hash = get_user_password(db, username)
+#     if saved_hash is not None:
+#         return jsonify({"exists": True})
+#     return jsonify({"exists": False})
 
+
+@app.route('/new_password', methods=['POST'])
+def new_password():
+    if g.username:
+        username = g.username
+        new_password = request.json["new_password"]
+        print(new_password)
+
+        update = db.update(
+            table="user",
+            set_column="password",
+            set_value=password_hash(new_password),
+            where_column="username",
+            where_value=username
+        )
+
+        return jsonify({"status": "success", "message": "User information updated successfully!"})
+
+    else:
+        return jsonify({"error": "Session username not found"})
+
+
+@app.route('/change_profile_data', methods=['POST'])
+def change_profile_data():
+    if g.username:
+        username = session["username"]
+        user = request.json["username"]
+        prefix = request.json["prefix"]
+        phone_number = request.json["phone_number"]
+        email = request.json["email"]
+        address = request.json["address"]
+        gender = request.json["gender"]
+
+        print(username)
+        print(user)
+        print(prefix + phone_number)
+        print(email)
+        print(address)
+        print(gender)
+
+        update = db.update_multiple(
+            table="user",
+            column_names=["username", "phone_number", "mail", "address",  "gender",
+                          "flag_phone", "flag_mail", "flag_password_changed"],
+            column_values=[user, prefix + phone_number, email, address, gender, 1, 1, 1],
+            where_column="username",
+            where_value=username
+        )
+
+        return jsonify({"status": "success", "message": "User information updated successfully!"})
+
+    else:
+        return jsonify({"error": "Session username not found"})
+
+
+@app.route('/db_personal_data', methods=['GET'])
+def extract_from_db():
+    if g.username:
+        # user = "utente2"
+        user = g.username
+        user_fetch = db.select_where(
+            table="user",
+            column="username",
+            value=user
+        )
+
+        return user_fetch[0]
+    else:
+        return jsonify({"error": "Session username not found"})
 
 @app.route('/login', methods=['POST'])
 def login():
