@@ -207,7 +207,7 @@ def new_password():
 
 @app.route('/change_profile_data', methods=['POST'])
 def change_profile_data():
-    if len(session) > 0:
+    if g.username:
         username = session["username"]
         user = request.json["username"]
         prefix = request.json["prefix"]
@@ -240,18 +240,18 @@ def change_profile_data():
 
 @app.route('/db_personal_data', methods=['GET'])
 def extract_from_db():
+    if g.username:
+        # user = "utente2"
+        user = g.username
+        user_fetch = db.select_where(
+            table="user",
+            column="username",
+            value=user
+        )
 
-    user = "utente2"
-    user_fetch = db.select_where(
-        table="user",
-        column="username",
-        value=user
-    )
-
-    print(user_fetch[0])
-
-    return user_fetch[0]
-
+        return user_fetch[0]
+    else:
+        return jsonify({"error": "Session username not found"})
 
 @app.route('/login', methods=['POST'])
 def login():
