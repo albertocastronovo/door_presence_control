@@ -1,6 +1,7 @@
 # Import the Flask class and other extensions from the flask module
 from flask import Flask, render_template, url_for, request, redirect, \
     session, flash, jsonify, g  # ,abort
+from flask import make_response
 from functools import wraps
 from pytz_deprecation_shim import PytzUsageWarning
 from utilities.server_functions import get_user_password, password_verify, password_hash, validate_rfid_event, \
@@ -270,8 +271,15 @@ def login():
         return jsonify({"exists": False}, {"registered": False}, roles)
     flag_psw = db.select_col_where("user", "flag_password_changed", "username", user)[0]["flag_password_changed"]
     print(flag_psw)
+
+    response = make_response("success")
+
     if flag_psw == 0:
-        return jsonify({"exists": True}, {"registered": False}, roles)
+        response.set_cookie("exists", "true")
+        response.set_cookie("registered", "false")
+        response.set_cookie("roles", "example_roles")
+
+        return response
     session["username"] = user
     fiscal_code = get_id_from_user(db, user)
     roles = get_all_roles(db, fiscal_code)
