@@ -18,7 +18,7 @@ warnings.filterwarnings("ignore", category=PytzUsageWarning)
 # create the application object
 app = Flask(__name__)
 # app.secret_key = os.getenv("door_secret")
-app.secret_key = "SUPER SECRET KEY"
+app.secret_key = "secret key"
 
 # Set session to be permanent and set its lifetime
 app.permanent_session_lifetime = timedelta(minutes=10)
@@ -40,7 +40,7 @@ pending_user_creations = {}
 
 def update_users_permissions():
     global users_permissions
-    users_permissions = {r["role"]: r for r in db.select_all("roles")}
+    users_permissions = {r["name"]: r for r in db.select_all("roles")}
 
 
 update_users_permissions()
@@ -135,6 +135,7 @@ def before_request():
 
 @app.route('/update_user', methods=['POST'])
 def update_user():
+    print(session)
     if g.username:
         username = g.username
 
@@ -158,7 +159,7 @@ def update_user():
 
         update = db.update_multiple(
             table="user",
-            column_names=["username", "password", "phone_number", "mail", "address", "birth_date", "gender",
+            column_names=["username", "password", "phone_number", "email", "address", "birth_date", "gender",
                           "flag_phone", "flag_mail", "flag_password_changed"],
             column_values=[user, password_hash(new_password), prefix + phone_number, email, address, birth_date,
                            gender, 1, 1, 1],
@@ -226,7 +227,7 @@ def change_profile_data():
 
         update = db.update_multiple(
             table="user",
-            column_names=["username", "phone_number", "mail", "address",  "gender",
+            column_names=["username", "phone_number", "email", "address",  "gender",
                           "flag_phone", "flag_mail", "flag_password_changed"],
             column_values=[user, prefix + phone_number, email, address, gender, 1, 1, 1],
             where_column="username",
