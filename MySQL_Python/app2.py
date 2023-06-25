@@ -5,7 +5,8 @@ from flask import make_response
 from functools import wraps
 from pytz_deprecation_shim import PytzUsageWarning
 from utilities.server_functions import get_user_password, password_verify, password_hash, validate_rfid_event, \
-    get_role_from_ids, get_id_from_user, random_secure_password, date_to_str, get_all_roles
+    get_role_from_ids, get_id_from_user, random_secure_password, date_to_str, get_all_roles, get_user_working_hours, \
+    get_user_statistics
 from utilities.database import Database
 from apscheduler.schedulers.background import BackgroundScheduler
 # import os
@@ -227,7 +228,7 @@ def change_profile_data():
 
         update = db.update_multiple(
             table="user",
-            column_names=["username", "phone_number", "email", "address",  "gender",
+            column_names=["username", "phone_number", "email", "address", "gender",
                           "flag_phone", "flag_mail", "flag_password_changed"],
             column_values=[user, prefix + phone_number, email, address, gender, 1, 1, 1],
             where_column="username",
@@ -242,6 +243,7 @@ def change_profile_data():
 
 @app.route('/db_personal_data', methods=['GET'])
 def extract_from_db():
+    print(session)
     if g.username:
         # user = "utente2"
         user = g.username
@@ -254,6 +256,71 @@ def extract_from_db():
         return user_fetch[0]
     else:
         return jsonify({"error": "Session username not found"})
+
+
+@app.route('/view_statistics', methods=['GET'])
+def stats():
+    dictionary = get_user_working_hours()
+    print(dictionary)
+    json_statistics = get_user_statistics(dictionary)
+    print(json_statistics)
+
+    response = {
+        'days': dictionary['days'],
+        'hours': dictionary['hours'],
+        'statistics': json_statistics
+    }
+
+    return jsonify(response)
+
+
+@app.route('/rfid_update', methods=['GET', 'POST', 'PUT', 'DELETE'])
+def rfid_card_management():
+    user = "utente1"
+    # user = session["username"]
+    rfid_key = db.select_col_where("user", "RFID_key", "username", user)[0]["RFID_key"]
+
+    if request.method == 'GET':
+        if rfid_key is None:
+            return jsonify({'message': 'No card associated'})
+        return jsonify({'rfid_card': rfid_key})
+
+    elif request.method == 'POST':
+        # Delete the RFID card from the database
+        update = db.update(
+            table="user",
+            set_column="RFID_key",
+            set_value=None,
+            where_column="username",
+            where_value=user
+        )
+        return jsonify({'message': 'RFID card deleted'})
+
+    elif request.method == 'PUT':
+        data = request.get_json()
+        new_rfid_card = data['rfid_card']
+
+        # Update the RFID card in the database
+        update = db.update(
+            table="user",
+            set_column="RFID_key",
+            set_value=new_rfid_card,
+            where_column="username",
+            where_value=user
+        )
+        return jsonify({'message': 'RFID card updated'})
+
+    elif request.method == 'DELETE':
+        # Delete the RFID card from the database
+        update = db.update(
+            table="user",
+            set_column="RFID_key",
+            set_value=None,
+            where_column="username",
+            where_value=user
+        )
+        return jsonify({'message': 'RFID card deleted'})
+
 
 @app.route('/login', methods=['POST'])
 def login():
@@ -281,7 +348,9 @@ def login():
         response.set_cookie("roles", "example_roles")
 
         return response
+
     session["username"] = user
+    print(session)
     fiscal_code = get_id_from_user(db, user)
     roles = get_all_roles(db, fiscal_code)
     print(roles)
@@ -429,6 +498,6 @@ def create_user():
 
 if __name__ == '__main__':
     try:
-        app.run(debug=True)
+        app.run(host="localhost", debug=True)
     finally:
         scheduler.shutdown()

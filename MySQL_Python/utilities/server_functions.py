@@ -3,6 +3,7 @@ from .time_functions import time_validation, date_to_str
 from .password_functions import *
 from .data_validation import validate_data
 from .door_user import DoorUser
+import json
 
 
 def get_user_password(database: Database, user: str) -> str | None:
@@ -54,7 +55,8 @@ def get_demo_users(database: Database, user: str, role: str, company: str) -> li
     pass
 
 
-def validate_impersonation(database: Database, user_me: str, user_to_impersonate: str, selected_company: str) -> tuple[bool, str]:
+def validate_impersonation(database: Database, user_me: str, user_to_impersonate: str, selected_company: str) -> tuple[
+    bool, str]:
     # check #1: origin and target user exist in database
     user_origin = door_user_from_db(database, user_me)
     user_target = door_user_from_db(database, user_to_impersonate)
@@ -69,7 +71,7 @@ def validate_impersonation(database: Database, user_me: str, user_to_impersonate
 
     # check #3: origin role can impersonate target role
     if user_1_in_company == "USR" or \
-        user_1_in_company == "CO" and user_2_in_company not in ["USR", "CO"] or \
+            user_1_in_company == "CO" and user_2_in_company not in ["USR", "CO"] or \
             user_1_in_company == "CA" and user_2_in_company not in ["USR", "CO", "CA"]:
         return False, "Origin user does not have permissions to impersonate target."
     return True, "Successfully impersonated."
@@ -103,33 +105,32 @@ def validate_rfid_event(
         db: Database,
         rfid: str,
         door_id: str
-        ) -> int:
-
+) -> int:
     door_data = db.select_where("doors", "door_code", door_id)
     if len(door_data) == 0:
-        return -1   # the door does not exist in the database
+        return -1  # the door does not exist in the database
 
     door_data = door_data[0]
     if not door_data["active"]:
-        return -2   # the door exists in the database, but it's not active
+        return -2  # the door exists in the database, but it's not active
 
     user = db.select_where("user", "RFID_key", rfid)
     if len(user) == 0:
-        return -3   # the RFID is not associated to any user
+        return -3  # the RFID is not associated to any user
     elif len(user) > 1:
-        return -4   # database error: multiple users with the same RFID key!
+        return -4  # database error: multiple users with the same RFID key!
 
     user_id = user[0]["fiscal_code"]
     company_id = door_data["company_id"]
     user_utc = db.select_wheres("user_to_customer", "cusID", company_id, "userID", user_id)[0]
 
     if len(user_utc) == 0:
-        return -5   # no user with that user ID in the company with that company ID
+        return -5  # no user with that user ID in the company with that company ID
 
     if time_validation(user_utc) != 0:
-        return -6   # the user may not enter today or at this time
+        return -6  # the user may not enter today or at this time
 
-    return 0        # if none of the previous conditions apply, the RFID event is valid
+    return 0  # if none of the previous conditions apply, the RFID event is valid
 
 
 def day_interval(form, day) -> str | None:
@@ -210,3 +211,35 @@ def validate_new_user_form(req_form):
         "door_id": door_id
 
     }, f"OK_{registration_type}"
+
+
+def get_user_working_hours():
+    dic = {
+
+        "days": ["15/6", "16/6", "17/6", "18/6", "19/6", "20/6", "21/6",
+                 "22/6", "23/6"],
+        "hours": [7.3, 3.9, 5.1, 8.1, 5.3, 6, 6.4, 5.9, 7.3]
+
+    }
+
+    return dic
+
+
+def get_user_statistics(dictionary):
+    hours = dictionary["hours"]
+
+    mean = round(sum(hours) / len(hours), 3)
+    mean_per_week = mean * 5
+    giorno_max = dictionary["days"][hours.index(max(hours))]
+    giorno_min = dictionary["days"][hours.index(min(hours))]
+
+    statistics = {
+        'Mean': mean,
+        'Mean per week': mean_per_week,
+        'Day with most working hours': giorno_max,
+        'Day with less working hours': giorno_min
+    }
+
+    json_statistics = json.dumps(statistics)
+
+    return json_statistics
