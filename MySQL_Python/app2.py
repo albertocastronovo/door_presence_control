@@ -3,6 +3,7 @@ from flask import Flask, render_template, url_for, request, redirect, \
     session, flash, jsonify, g  # ,abort
 from flask import make_response
 from functools import wraps
+import jwt
 from pytz_deprecation_shim import PytzUsageWarning
 from utilities.server_functions import get_user_password, password_verify, password_hash, validate_rfid_event, \
     get_role_from_ids, get_id_from_user, random_secure_password, date_to_str, get_all_roles, get_user_working_hours, \
@@ -21,6 +22,10 @@ app = Flask(__name__)
 # app.secret_key = os.getenv("door_secret")
 app.secret_key = "secret key"
 
+# Configurazione del segreto e della durata del token JWT
+app.config['JWT_SECRET_KEY'] = 'jwt-secret-key'
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(minutes=10)
+
 # Set session to be permanent and set its lifetime
 app.permanent_session_lifetime = timedelta(minutes=10)
 
@@ -37,6 +42,23 @@ db.connect_as(
 
 users_permissions = {}
 pending_user_creations = {}
+
+
+# Funzione per verificare il token JWT
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+        if 'Authorization' in request.headers:
+            token = request.headers['Authorization'].replace('Bearer ', '')
+        if not token:
+            return jsonify({'message': 'Token is missing!'}), 401
+        try:
+            jwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
+        except Exception as e:
+            return jsonify({'message': str(e)}), 401
+        return f(*args, **kwargs)
+    return decorated
 
 
 def update_users_permissions():
@@ -121,25 +143,25 @@ def signup():
             return jsonify({"error": "Session username not found"})
 
 
-@app.before_request
-def before_request():
-    if 'username' in session:
-        username = session['username']
-        g.username = username
-        print(username)
-        session.permanent = True  # Set session to be permanent
-    else:
-        g.username = None
-
-    # return g.username
+# @app.before_request
+# def before_request():
+#     if 'username' in session:
+#         username = session['username']
+#         g.username = username
+#         print(username)
+#         session.permanent = True  # Set session to be permanent
+#     else:
+#         g.username = None
+#
+#     # return g.username
 
 
 @app.route('/update_user', methods=['POST'])
+@token_required
 def update_user():
     print(session)
-    if g.username:
-        username = g.username
-
+    if session:
+        username = session["username"]
         user = request.json["username"]
         prefix = request.json["prefix"]
         phone_number = request.json["phone_number"]
@@ -189,8 +211,8 @@ def update_user():
 
 @app.route('/new_password', methods=['POST'])
 def new_password():
-    if g.username:
-        username = g.username
+    if session:
+        username = session["username"]
         new_password = request.json["new_password"]
         print(new_password)
 
@@ -210,7 +232,7 @@ def new_password():
 
 @app.route('/change_profile_data', methods=['POST'])
 def change_profile_data():
-    if g.username:
+    if session:
         username = session["username"]
         user = request.json["username"]
         prefix = request.json["prefix"]
@@ -242,20 +264,19 @@ def change_profile_data():
 
 
 @app.route('/db_personal_data', methods=['GET'])
+@token_required
 def extract_from_db():
-    print(session)
-    if g.username:
-        # user = "utente2"
-        user = g.username
-        user_fetch = db.select_where(
-            table="user",
-            column="username",
-            value=user
-        )
 
-        return user_fetch[0]
-    else:
-        return jsonify({"error": "Session username not found"})
+    user = "utente2"
+    # user = session["username"]
+    user_fetch = db.select_where(
+        table="user",
+        column="username",
+        value=user
+    )
+
+    return user_fetch[0]
+
 
 
 @app.route('/view_statistics', methods=['GET'])
@@ -276,50 +297,55 @@ def stats():
 
 @app.route('/rfid_update', methods=['GET', 'POST', 'PUT', 'DELETE'])
 def rfid_card_management():
-    user = "utente1"
-    # user = session["username"]
-    rfid_key = db.select_col_where("user", "RFID_key", "username", user)[0]["RFID_key"]
 
-    if request.method == 'GET':
-        if rfid_key is None:
-            return jsonify({'message': 'No card associated'})
-        return jsonify({'rfid_card': rfid_key})
+    if session:
 
-    elif request.method == 'POST':
-        # Delete the RFID card from the database
-        update = db.update(
-            table="user",
-            set_column="RFID_key",
-            set_value=None,
-            where_column="username",
-            where_value=user
-        )
-        return jsonify({'message': 'RFID card deleted'})
+        user = session["username"]
+        rfid_key = db.select_col_where("user", "RFID_key", "username", user)[0]["RFID_key"]
 
-    elif request.method == 'PUT':
-        data = request.get_json()
-        new_rfid_card = data['rfid_card']
+        if request.method == 'GET':
+            if rfid_key is None:
+                return jsonify({'message': 'No card associated'})
+            return jsonify({'rfid_card': rfid_key})
 
-        # Update the RFID card in the database
-        update = db.update(
-            table="user",
-            set_column="RFID_key",
-            set_value=new_rfid_card,
-            where_column="username",
-            where_value=user
-        )
-        return jsonify({'message': 'RFID card updated'})
+        elif request.method == 'POST':
+            # Delete the RFID card from the database
+            update = db.update(
+                table="user",
+                set_column="RFID_key",
+                set_value=None,
+                where_column="username",
+                where_value=user
+            )
+            return jsonify({'message': 'RFID card deleted'})
 
-    elif request.method == 'DELETE':
-        # Delete the RFID card from the database
-        update = db.update(
-            table="user",
-            set_column="RFID_key",
-            set_value=None,
-            where_column="username",
-            where_value=user
-        )
-        return jsonify({'message': 'RFID card deleted'})
+        elif request.method == 'PUT':
+            data = request.get_json()
+            new_rfid_card = data['rfid_card']
+
+            # Update the RFID card in the database
+            update = db.update(
+                table="user",
+                set_column="RFID_key",
+                set_value=new_rfid_card,
+                where_column="username",
+                where_value=user
+            )
+            return jsonify({'message': 'RFID card updated'})
+
+        elif request.method == 'DELETE':
+            # Delete the RFID card from the database
+            update = db.update(
+                table="user",
+                set_column="RFID_key",
+                set_value=None,
+                where_column="username",
+                where_value=user
+            )
+            return jsonify({'message': 'RFID card deleted'})
+
+    else:
+        return jsonify({"error": "Session username not found"})
 
 
 @app.route('/login', methods=['POST'])
@@ -354,7 +380,10 @@ def login():
     fiscal_code = get_id_from_user(db, user)
     roles = get_all_roles(db, fiscal_code)
     print(roles)
-    return jsonify({"exists": True}, {"registered": True}, roles)
+    # Genera il token JWT
+    token = jwt.encode({'username': user, 'exp': datetime.utcnow() + app.config['JWT_ACCESS_TOKEN_EXPIRES']},
+                       app.config['JWT_SECRET_KEY'], algorithm='HS256')
+    return jsonify({"exists": True}, {"registered": True}, roles, {"token": token})
 
 
 @app.route('/logout')
