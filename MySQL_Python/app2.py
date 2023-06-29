@@ -1,5 +1,5 @@
 # Import the Flask class and other extensions from the flask module
-from flask import Flask, jsonify, request\
+from flask import Flask, jsonify, request \
     # , render_template, url_for, redirect, flash, g, abort, session
 from flask import make_response
 from functools import wraps
@@ -14,6 +14,7 @@ import os
 from datetime import datetime, timedelta
 # import requests
 import warnings
+import json
 
 warnings.filterwarnings("ignore", category=PytzUsageWarning)
 
@@ -172,7 +173,6 @@ def new_password():
 @app.route('/change_profile_data', methods=['POST'])
 @token_required
 def change_profile_data():
-
     username = request.headers.get("username")
     user = request.json["new_username"]
     prefix = request.json["prefix"]
@@ -196,7 +196,6 @@ def change_profile_data():
 @app.route('/db_personal_data', methods=['GET'])
 @token_required
 def extract_from_db():
-
     user = request.headers.get("username")
     user_fetch = db.select_where(
         table="user",
@@ -231,21 +230,119 @@ def stats():
 @app.route('/usr_update', methods=['GET', 'POST', 'PUT', 'DELETE'])
 @token_required
 def usr_update():
+    user = request.headers.get("username")
+    print(user)
+    fiscal_code_user = db.select_col_where("user", "fiscal_code", "username", user)[0]["fiscal_code"]
+    vat = db.select_col_where("user_to_customer", "cusID", "userID", fiscal_code_user)[0]["cusID"]
+
+    def extract_name_from_string(data_string):  # FA SCHIFO MA FUNZIONA
+        try:
+            data_dict = json.loads(data_string)
+            value = next(iter(data_dict.values()))
+            name = value.strip('"')
+            return name
+        except (json.JSONDecodeError, AttributeError, StopIteration):
+            return None
+
     if request.method == 'GET':
+
         all_usrs = db.select_col("user", "username")
         return jsonify(all_usrs)
-    elif request.method == 'POST':
-        # Logica per gestire una richiesta POST
-        jsonify({'message': 'POST'})
-    elif request.method == 'PUT':
-        # Logica per gestire una richiesta PUT
-        jsonify({'message': 'PUT'})
-    elif request.method == 'DELETE':
-        # Logica per gestire una richiesta DELETE
-        jsonify({'message': 'DELETE'})
 
-    # In caso di altri metodi HTTP non gestiti
-    return jsonify({'message': 'Method not allowed'}), 405
+    elif request.method == 'POST':
+
+        name = request.json['name']
+        surname = request.json['surname']
+        username = request.json['username']
+        password = request.json['password']
+        fiscal_code = request.json['fiscal_code']
+        role = request.json['role']
+
+        insert_usr = db.insert(
+            "user",
+            ("name", "surname", "username", "password", "fiscal_code"),
+            (name, surname, username, password_hash(password), fiscal_code)
+        )
+
+        insert_usr_to_cstmr = db.insert(
+            "user_to_customer",
+            ("cusID", "userID", "role", "whitelist"),
+            (vat, fiscal_code, role, 0)
+        )
+
+        return jsonify({"status": "success", "message": "User created successfully!"})
+
+    elif request.method == 'PUT':
+
+        json_to_string = request.headers.get("user")
+        query = extract_name_from_string(json_to_string)
+        print(query)
+
+        name = request.json['name']
+        surname = request.json['surname']
+        username = request.json['username']
+        password = request.json['password']
+        fiscal_code = request.json['fiscal_code']
+        prefix = request.json["prefix"]
+        phone_number = request.json["phone_number"]
+        email = request.json["email"]
+        address = request.json["address"]
+        gender = request.json["gender"]
+
+        update_usr = db.update_multiple(
+            table="user",
+            column_names=["name", "surname", "username", "password", "fiscal_code",
+                          "phone_number", "email", "address", "gender"],
+            column_values=[name, surname, username, password_hash(password), fiscal_code,
+                           prefix + phone_number, email, address, gender],
+            where_column="username",
+            where_value=query
+        )
+
+        ### COME INDIVIDUO UNIVOCAMENTE L'UTENTE SE DEVO CAMBIARE IL COD. FISCALE? ###
+
+        # update_usr_to_cstmr = db.update(
+        #     table="user_to_customer",
+        #     set_column="userID",
+        #     set_value=fiscal_code,
+        #     where_column="userID",
+        #     where_value="FISCALCODE" ???
+        # )
+
+        return jsonify({"status": "success", "message": "User information updated successfully!"})
+
+    elif request.method == 'DELETE':
+
+        try:
+            username = request.get_json()["username"]
+
+            if not username:
+                return jsonify({"status": "error", "message": "Username parameter is missing."}), 400
+
+            fiscal_code_result = db.select_col_where("user", "fiscal_code", "username", username)
+
+            if not fiscal_code_result:
+                return jsonify({"status": "error", "message": "User not found."}), 404
+
+            fiscal_code = fiscal_code_result[0]["fiscal_code"]
+            delete_usr = db.delete("user", "username", username)
+
+            if not fiscal_code:
+                return jsonify({"status": "error", "message": "Fiscalcode parameter is missing."}), 400
+
+            delete_usr_to_cstmr = db.delete("user_to_customer", "userID", fiscal_code)
+
+            if delete_usr and delete_usr_to_cstmr:
+                return jsonify({"status": "success", "message": "User deleted successfully!"})
+
+            else:
+                return jsonify({"status": "error", "message": "Failed to delete user."}), 500
+
+        except Exception as e:
+            return jsonify({"status": "error", "message": str(e)}), 500
+
+    else:
+        return jsonify({'message': 'Method not allowed'}), 405
 
 
 @app.route('/rfid_update', methods=['GET', 'POST', 'PUT', 'DELETE'])
