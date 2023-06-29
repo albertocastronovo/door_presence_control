@@ -1,6 +1,6 @@
 # Import the Flask class and other extensions from the flask module
-from flask import Flask,session, jsonify, request\
-    # , render_template, url_for, redirect, flash, g, abort
+from flask import Flask, jsonify, request\
+    # , render_template, url_for, redirect, flash, g, abort, session
 from flask import make_response
 from functools import wraps
 import jwt
@@ -20,14 +20,13 @@ warnings.filterwarnings("ignore", category=PytzUsageWarning)
 # create the application object
 app = Flask(__name__)
 app.secret_key = os.getenv("door_secret")
-# app.secret_key = "secret key"
 
 # Configuring the secret and duration of the JWT token
 app.config['JWT_SECRET_KEY'] = 'jwt-secret-key'
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(minutes=10)
 
 # Set session to be permanent and set its lifetime
-app.permanent_session_lifetime = timedelta(minutes=10)
+# app.permanent_session_lifetime = timedelta(minutes=10)
 
 db = Database(
     host="localhost",
@@ -77,85 +76,42 @@ scheduler.add_job(
 scheduler.start()
 
 
-# login required decorator
-# def login_required(f):
-#     @wraps(f)
-#     def wrap(*args, **kwargs):
-#         if "username" in session:
+# def permissions_required(flag_list):
+#     def wrapper_function(f):
+#         @wraps(f)
+#         def wrapper(*args, **kwargs):
+#             permissions = session["permissions"]
+#             for flag in flag_list:
+#                 print(f"flag: {flag}")
+#                 if not permissions.get(flag, False):
+#                     print(f"invalid flag: {flag}")
+#                     return
 #             return f(*args, **kwargs)
-#         else:
-#             flash('You need to login first.')
-#             return redirect(url_for('login'))
 #
-#     return wrap
+#         return wrapper
+#
+#     return wrapper_function
 
 
-def permissions_required(flag_list):
-    def wrapper_function(f):
-        @wraps(f)
-        def wrapper(*args, **kwargs):
-            permissions = session["permissions"]
-            for flag in flag_list:
-                print(f"flag: {flag}")
-                if not permissions.get(flag, False):
-                    print(f"invalid flag: {flag}")
-                    return
-            return f(*args, **kwargs)
-
-        return wrapper
-
-    return wrapper_function
-
-
-@app.route('/signup', methods=['GET', 'POST'])
+@app.route('/signup', methods=['POST'])
 def signup():
-    if request.method == 'POST':
-        # print(request.method)
-        # session.pop("username", None)
-        user = request.json["username"]
-        print(user)
-        # session["username"] = user
-        # session.permanent = True  # Set session to be permanent
-        # print(session)
-        # print(session["username"])
-        saved_hash = get_user_password(db, user)
-        if saved_hash is None:
-            return jsonify({"exists": False, "registered": False})
-        user_pw = request.json["password"]
-        print(user_pw)
-        is_correct = password_verify(user_pw, saved_hash)
-        if not is_correct:
-            return jsonify({"exists": False, "registered": False})
-        flag_psw = db.select_col_where("user", "flag_password_changed", "username", user)[0]["flag_password_changed"]
-        print(flag_psw)
-        print(type(flag_psw))
-        if flag_psw == 0:
-            token = jwt.encode({'username': user, 'exp': datetime.utcnow() + app.config['JWT_ACCESS_TOKEN_EXPIRES']},
-                               app.config['JWT_SECRET_KEY'], algorithm='HS256')
-            return jsonify({"exists": True, "registered": False}, {"token": token})
-        return jsonify({"exists": True, "registered": True})
-
-    else:
-        # print(request.method)
-        # if "username" in session:
-        #     username = session["username"]
-        #     g.username = username
-        #     return jsonify({"username": username})
-        # else:
-        return jsonify({"method": "GET request"})
-
-
-# @app.before_request
-# def before_request():
-#     if 'username' in session:
-#         username = session['username']
-#         g.username = username
-#         print(username)
-#         session.permanent = True  # Set session to be permanent
-#     else:
-#         g.username = None
-#
-#     # return g.username
+    user = request.json["username"]
+    print(user)
+    saved_hash = get_user_password(db, user)
+    if saved_hash is None:
+        return jsonify({"exists": False, "registered": False})
+    user_pw = request.json["password"]
+    print(user_pw)
+    is_correct = password_verify(user_pw, saved_hash)
+    if not is_correct:
+        return jsonify({"exists": False, "registered": False})
+    flag_psw = db.select_col_where("user", "flag_password_changed", "username", user)[0]["flag_password_changed"]
+    print(flag_psw)
+    if flag_psw == 0:
+        token = jwt.encode({'username': user, 'exp': datetime.utcnow() + app.config['JWT_ACCESS_TOKEN_EXPIRES']},
+                           app.config['JWT_SECRET_KEY'], algorithm='HS256')
+        return jsonify({"exists": True, "registered": False}, {"token": token})
+    return jsonify({"exists": True, "registered": True})
 
 
 @app.route('/update_user', methods=['POST'])
@@ -169,17 +125,16 @@ def update_user():
     address = request.json["address"]
     birth_date = request.json["birth_date"]
     gender = request.json["gender"]
-    new_password = request.json["new_password"]
+    newPassword = request.json["new_password"]
 
     update = db.update_multiple(
         table="user",
         column_names=["username", "password", "phone_number", "email", "address", "birth_date", "gender",
                       "flag_phone", "flag_mail", "flag_password_changed"],
-        column_values=[user, password_hash(new_password), prefix + phone_number, email, address, birth_date,
+        column_values=[user, password_hash(newPassword), prefix + phone_number, email, address, birth_date,
                        gender, 1, 1, 1],
         where_column="fiscal_code",
         where_value=username
-        # where_value="FISCALCODE"
     )
     # Check if there is another person with the same username --> check_username()
 
@@ -201,12 +156,12 @@ def update_user():
 @token_required
 def new_password():
     username = request.headers.get("username")
-    new_password = request.json["new_password"]
+    newPassword = request.json["new_password"]
 
     update = db.update(
         table="user",
         set_column="password",
-        set_value=password_hash(new_password),
+        set_value=password_hash(newPassword),
         where_column="username",
         where_value=username
     )
@@ -271,6 +226,26 @@ def stats():
     }
 
     return jsonify(response)
+
+
+@app.route('/usr_update', methods=['GET', 'POST', 'PUT', 'DELETE'])
+@token_required
+def usr_update():
+    if request.method == 'GET':
+        all_usrs = db.select_col("user", "username")
+        return jsonify(all_usrs)
+    elif request.method == 'POST':
+        # Logica per gestire una richiesta POST
+        jsonify({'message': 'POST'})
+    elif request.method == 'PUT':
+        # Logica per gestire una richiesta PUT
+        jsonify({'message': 'PUT'})
+    elif request.method == 'DELETE':
+        # Logica per gestire una richiesta DELETE
+        jsonify({'message': 'DELETE'})
+
+    # In caso di altri metodi HTTP non gestiti
+    return jsonify({'message': 'Method not allowed'}), 405
 
 
 @app.route('/rfid_update', methods=['GET', 'POST', 'PUT', 'DELETE'])
