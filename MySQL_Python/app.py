@@ -2,7 +2,8 @@ from flask import Flask, render_template, url_for, request, redirect, \
     session, flash, jsonify
 from utilities.server_functions import get_user_password, password_verify, password_hash, validate_rfid_event, \
     get_role_from_ids, get_id_from_user, random_secure_password, date_to_str, validate_new_user_form, get_all_roles, \
-    get_geninfo_from_user, get_user_from_email, validate_impersonation, door_user_from_db
+    get_geninfo_from_user, get_user_from_email, validate_impersonation, door_user_from_db, get_user_rfid, \
+    name_from_rfid, interact_with_area
 from utilities.database import Database
 from utilities.door_user import DoorUser, DoorUserSerializer
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -14,6 +15,9 @@ import requests
 from copy import deepcopy
 from auth.auth import oauth_init
 from decorators.user_checks import login_required, required_permissions, role_permissions
+
+server_ip = "192.168.1.192"
+server_port = "5000"
 
 # create the application object
 app = Flask(__name__)
@@ -83,6 +87,12 @@ scheduler.start()
 @app.errorhandler(DoorHTTPException)
 def handle_error(error):
     return render_template("error.html", error=error)
+
+
+@app.route("/testhours")
+def test_hours():
+    i = interact_with_area(db, "utente2", "IT98803960651", "666")
+    return "OK"
 
 
 @app.route('/login/google')
@@ -419,11 +429,32 @@ def logout():
     return redirect(url_for('welcome'))
 
 
+@app.route("/door_qr/<door_id>/<door_ip>", methods=["GET", "POST"])
+@login_required
+def door_qr(door_id, door_ip):
+    if door_id is None:
+        return "fail"
+    rfid = get_user_rfid(db, session["user_object"].get_username())
+    if rfid is None:
+        return "fail"
+    payload = {
+        "rfid": str(rfid),
+        "door_id": str(door_id),
+        "is_qr": True,
+        "door_ip": door_ip
+    }
+    request_access = requests.post("https://" + server_ip + ":" + server_port + "/" + url_for("control_door"), json=payload, verify=False)
+    return "ok"
+
+
 @app.route("/door", methods=["POST"])
 def control_door():
+    print(f"entered control_door with json: {request.json}")
     rfid = request.json.get("rfid", None)
     door_id = request.json.get("door_id", None)
-    print(request.json)
+    is_qr = request.json.get("is_qr", False)
+
+    print(f"rfid: {rfid}\ndoor id: {door_id}")
     if rfid is None or door_id is None:
         return "461"
 
@@ -440,7 +471,12 @@ def control_door():
 
     print("request status pass")
 
-    get_door_status = requests.get(f"http://{request.remote_addr}:5000/door")
+    if not is_qr:
+        remote_addr = request.remote_addr
+    else:
+        remote_addr = request.json.get("door_ip")
+
+    get_door_status = requests.get(f"http://{remote_addr}:5000/door")
     if not get_door_status.ok:
         return "462"  # Could not reach the door
 
@@ -452,12 +488,15 @@ def control_door():
 
     print("critical info pass")
 
-    command = "open" if door_data["state"] == "closed" else "close"
+    command = "open"    # if door_data["state"] == "closed" else "close"
     door_command = {"command": command}
     headers = {"Content-type": "application/json"}
-    set_door_status = requests.post(f"http://{request.remote_addr}:5000/door", json=door_command, headers=headers)
+    set_door_status = requests.post(f"http://{remote_addr}:5000/door", json=door_command, headers=headers)
     if not set_door_status.ok:
         return "464"  # the door was not set
+
+    user_name = name_from_rfid(db, rfid)
+    send_door_name = requests.post(f"http://{remote_addr}:4999/welcome/{user_name}", headers=headers)
 
     print("set door pass")
 
@@ -645,6 +684,6 @@ def create_user():
 
 if __name__ == '__main__':
     try:
-        app.run(port=5000, debug=True, ssl_context="adhoc")
+        app.run(host="192.168.1.192", port=5000, debug=True, ssl_context="adhoc")
     finally:
         scheduler.shutdown()

@@ -19,3 +19,5 @@ db.update(
     where_column="username",
     where_value="maurizio"
 )
+
+print(password_hash("password4"))

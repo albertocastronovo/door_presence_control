@@ -4,6 +4,7 @@ from .password_functions import *
 from .data_validation import validate_data
 from .door_user import DoorUser
 import json
+from datetime import datetime
 
 
 def get_user_password(database: Database, user: str) -> str | None:
@@ -12,6 +13,60 @@ def get_user_password(database: Database, user: str) -> str | None:
         return query[0]["password"]
     except IndexError:
         return None
+
+def name_from_rfid(database: Database, rfid: str) -> str | None:
+    query = database.select_col_where("user", "name", "RFID_key", rfid)
+    try:
+        return str(query[0]["name"])
+    except IndexError:
+        return None
+
+def get_user_rfid(database: Database, user: str) -> str | None:
+    query = database.select_col_where("user", "RFID_key", "username", user)
+    try:
+        return str(query[0]["RFID_key"])
+    except IndexError:
+        return None
+
+
+def interact_with_area(database: Database, user: str, company_id: str, door_id: str) -> bool:
+    table_name = company_id.lower() + "_user_to_area"
+    past_query = database.select_wheres(table_name, "user", user, "area_id", door_id)
+    print("past query passed")
+    try:
+        last_time = past_query[0]["last_interaction_time"]
+        last_state = int(past_query[0]["is_inside"])
+        if last_state == 1:     # if the user was inside
+            delta = datetime.now() - last_time
+            seconds = int(delta.total_seconds())
+            add_working_hours(database, user, company_id, door_id, seconds)  # add the amount to its working hours
+        new_state = 1 - last_state
+        new_query = database.update_multiple_wheres(
+            table_name, ["is_inside", "last_interaction_time"], [new_state, datetime.now()], "user", user, "area_id", door_id
+        )
+        return new_query == 0
+    except IndexError:
+        last_time = datetime.now()
+        last_state = 0
+        insert_query = database.insert(
+            table_name, ("user", "area_id", "is_inside", "last_interaction_time"), (user, door_id, 1, datetime.now())
+        )
+        return insert_query == 0
+
+
+def add_working_hours(database: Database, user: str, company_id: str, area_id: str, seconds: int) -> bool:
+    table_name = company_id.lower() + "_hours"
+    past_hours = database.select_where_many(table_name, ["user", "area_id", "date"], [user, area_id, datetime.now()])
+    try:
+        past_secs = int(past_hours[0]["seconds_in"])
+        new_query = database.update_where_many(
+            table_name, "seconds_in", seconds + past_secs, ["user", "area_id", "date"], [user, area_id, datetime.now()]
+        )
+    except IndexError:
+        new_query = database.insert(
+            table_name, ("user", "area_id", "date", "seconds_in"), (user, area_id, datetime.now(), seconds)
+        )
+    return new_query == 0
 
 
 def get_id_from_user(database: Database, user: str) -> str | None:
@@ -55,8 +110,12 @@ def get_demo_users(database: Database, user: str, role: str, company: str) -> li
     pass
 
 
-def validate_impersonation(database: Database, user_me: str, user_to_impersonate: str, selected_company: str) -> tuple[
-    bool, str]:
+def validate_impersonation(
+        database: Database,
+        user_me: str,
+        user_to_impersonate: str,
+        selected_company: str
+                            ) -> tuple[bool, str]:
     # check #1: origin and target user exist in database
     user_origin = door_user_from_db(database, user_me)
     user_target = door_user_from_db(database, user_to_impersonate)
