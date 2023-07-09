@@ -120,6 +120,18 @@ class Database:
         query = f"SELECT * FROM {table} WHERE {column_1} = %s {mode} {column_2} = %s"
         return self.__execute_query(query, (value_1, value_2))
 
+    def select_wheres_one_week(
+        self,
+        table: str,
+        column_1: str,
+        value_1,
+        column_2: str,
+        value_2,
+        mode: str = "AND"
+    ):
+        query = f"SELECT * FROM {table} WHERE {column_1} = %s {mode} {column_2} = %s AND date >= DATE_SUB(DATE(NOW()), INTERVAL 1 WEEK)"
+        return self.__execute_query(query, (value_1, value_2))
+
     def select_where_many(
             self,
             table: str,

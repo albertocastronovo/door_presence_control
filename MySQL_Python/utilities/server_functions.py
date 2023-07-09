@@ -69,6 +69,25 @@ def add_working_hours(database: Database, user: str, company_id: str, area_id: s
     return new_query == 0
 
 
+def get_last_week_hours(database: Database, user: str, company_id: str, area_id: str | None = None):
+    if area_id is None:
+        table_name = company_id.lower() + "_defaults"
+        default_query = database.select_where(table_name, "user_id", user)
+        try:
+            area_id = default_query[0]["default_area"]
+        except IndexError:
+            return None
+
+    table_name = company_id.lower() + "_hours"
+    all_hours = database.select_wheres_one_week(table_name, "user", user, "area_id", area_id)
+    try:
+        days = [d["date"].strftime("%Y-%m-%d") for d in all_hours]
+        hours = [d["seconds_in"]/3600.0 for d in all_hours]
+        return {"days": days, "hours": hours}
+    except:
+        return None
+
+
 def get_id_from_user(database: Database, user: str) -> str | None:
     query = database.select_col_where("user", "fiscal_code", "username", user)
     try:

@@ -3,7 +3,7 @@ from flask import Flask, render_template, url_for, request, redirect, \
 from utilities.server_functions import get_user_password, password_verify, password_hash, validate_rfid_event, \
     get_role_from_ids, get_id_from_user, random_secure_password, date_to_str, validate_new_user_form, get_all_roles, \
     get_geninfo_from_user, get_user_from_email, validate_impersonation, door_user_from_db, get_user_rfid, \
-    name_from_rfid, interact_with_area
+    name_from_rfid, interact_with_area, get_last_week_hours
 from utilities.database import Database
 from utilities.door_user import DoorUser, DoorUserSerializer
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -91,7 +91,7 @@ def handle_error(error):
 
 @app.route("/testhours")
 def test_hours():
-    i = interact_with_area(db, "utente2", "IT98803960651", "666")
+    print(get_last_week_hours(db, "utente2", "IT98803960651"))
     return "OK"
 
 
