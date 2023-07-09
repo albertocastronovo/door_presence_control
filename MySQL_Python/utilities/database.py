@@ -141,6 +141,14 @@ class Database:
     ):
         query = f"SELECT {column_return} FROM {table} WHERE {column_condition} = %s"
         return self.__execute_query(query, (value,))
+    
+    def select_col(
+            self,
+            table: str,
+            column_return: str
+    ):
+        query = f"SELECT {column_return} FROM {table}"
+        return self.__execute_query(query)
 
     def select_join_where(
             self,
