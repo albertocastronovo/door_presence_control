@@ -120,6 +120,30 @@ class Database:
         query = f"SELECT * FROM {table} WHERE {column_1} = %s {mode} {column_2} = %s"
         return self.__execute_query(query, (value_1, value_2))
 
+    def select_wheres_one_week(
+        self,
+        table: str,
+        column_1: str,
+        value_1,
+        column_2: str,
+        value_2,
+        mode: str = "AND"
+    ):
+        query = f"SELECT * FROM {table} WHERE {column_1} = %s {mode} {column_2} = %s AND date >= DATE_SUB(DATE(NOW()), INTERVAL 1 WEEK)"
+        return self.__execute_query(query, (value_1, value_2))
+
+    def select_where_many(
+            self,
+            table: str,
+            columns: list[str],
+            values: list,
+            mode: str = "AND"
+    ):
+        query = f"SELECT * FROM {table} WHERE "
+        query += f" {mode} ".join([f"{col} = %s" for col in columns])
+        print(query)
+        return self.__execute_query(query, tuple(values))
+
     def select_col_where(
             self,
             table: str,
@@ -244,6 +268,34 @@ class Database:
             return 0
         except:
             return -1
+
+    def update_where_many(
+            self,
+            table: str,
+            set_column: str,
+            set_value,
+            columns: list[str],
+            values: list,
+            mode: str = "AND"
+    ):
+        query = f"UPDATE {table} SET {set_column} = %s WHERE "
+        params_tuple = (set_value,) + tuple(values)
+        query += f" {mode} ".join([f"{col} = %s" for col in columns])
+        try:
+            self.__execute_query(query, params_tuple)
+            return 0
+        except:
+            return -1
+
+    def insert_or_update(self, table: str, update_column: str, values: list):
+        query = f"INSERT INTO {table} VALUES (%s, %s, %s, %s) ON DUPLICATE KEY UPDATE {update_column} = %s"
+        params = tuple(values)
+        try:
+            self.__execute_query(query, params, disable_fetchall=True)
+            return 0
+        except:
+            return -1
+
 
     def delete(
             self,
