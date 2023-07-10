@@ -16,8 +16,11 @@ def get_user_password(database: Database, user: str) -> str | None:
 
 
 def change_password(database: Database, user: str, new_password: str) -> bool:
+    print(f"new password: {new_password}")
     new_password_hash = password_hash(new_password)
-    query = database.update("user", "password", new_password_hash, "username", user)
+    print(f"new password hash: {new_password_hash}")
+    query = database.update("user", "password", new_password_hash, "fiscal_code", user)
+    print(query)
     return query == 0
 
 

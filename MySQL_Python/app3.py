@@ -14,11 +14,12 @@ import os
 # custom modules imports
 
 from utilities.server_functions import (
-    get_geninfo_from_user, change_password
+    get_geninfo_from_user, change_password, get_user_password
 )
 from utilities.database import Database
 from utilities.custom_http_errors import DoorHTTPException
 from utilities.mail import request_password_recovery, verify_recovery_code
+from utilities.password_functions import password_verify
 from utilities.data_validation import validate_data
 from auth.auth import oauth_init
 
@@ -128,18 +129,38 @@ def login():
     else:
         user = request.form.get("username", None)
         pw = request.form.get("password", None)
-        if user == "test" and pw == "test":
-            access_token = create_access_token(identity=user)
-            return jsonify({"access_token": access_token, "msg": "Login successful"}), 200
-        return jsonify({"msg": "Invalid login"}), 401
+        if user is None:
+            user = request.json.get("username", None)
+        if pw is None:
+            pw = request.json.get("password", None)
+        if user is None or pw is None:
+            return jsonify({"msg": "Invalid request"}), 400
+
+        saved_hash = get_user_password(db, user)
+        if saved_hash is None:
+            return jsonify({"msg": "Wrong username/password"}), 401
+
+        is_verified = password_verify(pw, saved_hash)
+        if not is_verified:
+            return jsonify({"msg": "Wrong username/password"}), 401
+
+        access_token = create_access_token(identity=user)
+
+        return jsonify({"access_token": access_token,
+                        "msg": "Login successful",
+                        "logged_user": user,
+                        "impersonated_user": user
+                        }), 200
 
 
 @app.route("/reset_password", methods=["GET", "POST"])
 def reset_password():
     if request.method == "GET":
-        pass
+        return render_template("request_password_change.html", error_message="none")
     else:
+        print("entered post")
         user = request.json.get("username", None)
+        print(f"user: {user}")
         if user is None:
             return jsonify({"msg": "Username not provided"}), 401
         route_link = f"https://{app_ip}:{app_port}/reset_link"
@@ -152,18 +173,25 @@ def reset_password():
 @app.route("/reset_link/<user>/<code>", methods=["GET", "POST"])
 def reset_link(user, code):
     if request.method == "GET":
-        return jsonify({"msg": "Password reset GET"})
+        return render_template("change_password.html", user=user, code=code)
     else:
+        print("entered reset POST")
         is_correct = verify_recovery_code(db, user, code)
         if not is_correct:
             return jsonify({"msg": "Invalid or expired code"}), 401
-        new_password = request.json.get("password", None)
+        print("the recovery code is correct")
+        print(f"request json: {request.form}")
+        new_password = request.form.get("confirm_password", None)
+        print(f"password: {new_password}")
         if not new_password:
             return jsonify({"msg": "Missing password"}), 401
+        print("the password is in the JSON")
         is_password_secure = validate_data(new_password, "password")
         if not is_password_secure:
-            return jsonify({"msg": "Password not secure"}), 401
+            return render_template("change_password.html", user=user, code=code, error_code="Password not secure!")
+        print("the password is secure")
         change_password(db, user, new_password)
+        print("the password was changed")
         return jsonify({"msg": "Password successfully changed"}), 200
 
 # end of routes
