@@ -231,7 +231,6 @@ def stats():
 @token_required
 def usr_update():
     user = request.headers.get("username")
-    print(user)
     fiscal_code_user = db.select_col_where("user", "fiscal_code", "username", user)[0]["fiscal_code"]
     role = db.select_col_where("user_to_customer", "role", "userID", fiscal_code_user)[0]["role"]
     vat = db.select_col_where("user_to_customer", "cusID", "userID", fiscal_code_user)[0]["cusID"]
@@ -251,45 +250,39 @@ def usr_update():
 
             # Get rows where cusID equals vat from the user_to_customer table
             user_to_customer_rows = db.select_where('user_to_customer', 'cusID', vat)
-            print(user_to_customer_rows)
 
             # Get the row where role equals the given role from the permissions table
             role_row = db.select_where('permissions', 'role', role)
-            print(role_row)
-
-            if not role_row:
-                print("Role not found in the permissions table")
-                return []
 
             # Get the column names with value 1, except for the 'code' column
             columns_with_1 = [
                 column_name for column_name, value in role_row[0].items() if value == 1 and column_name != 'code'
             ]
-            print(columns_with_1)
 
             # Filter the user_to_customer_rows based on the role
             filtered_rows = [
                 row for row in user_to_customer_rows if row['role'] in columns_with_1
             ]
-            print(filtered_rows)
 
             # Get the userIDs from the filtered rows
             user_ids = [row['userID'] for row in filtered_rows]
             print(user_ids)
 
             # Get the username values corresponding to the userIDs found in the user table
-            result = [db.select_where('user', 'userID', user_id)[0]['username'] for user_id in user_ids if db.select_where('user', 'userID', user_id)]
-            print(result)
+            result = [db.select_col_where("user", "username", "fiscal_code", user_id)[0]["username"] for user_id in user_ids if db.select_where('user', 'fiscal_code', user_id)]
 
-            return result
+            # Remove from the list the username that corresponds to the person who is performing the action
+            result.remove(user)
+
+            # Convert in a dictionary
+            result_dict = [{'username': usrnm} for usrnm in result]
+
+            return result_dict
 
         usernames = get_usernames_by_role_and_vat(role, vat)
-        print(usernames)
-
         all_usrs = db.select_col("user", "username")
-        print(all_usrs)
 
-        return jsonify(all_usrs)
+        return jsonify(usernames)
 
     elif request.method == 'POST':
 
@@ -299,11 +292,12 @@ def usr_update():
         password = request.json['password']
         fiscal_code = request.json['fiscal_code']
         role = request.json['role']
+        birth_date = request.json["birth_date"]
 
         insert_usr = db.insert(
             "user",
-            ("name", "surname", "username", "password", "fiscal_code"),
-            (name, surname, username, password_hash(password), fiscal_code)
+            ("name", "surname", "username", "password", "fiscal_code", "birth_date"),
+            (name, surname, username, password_hash(password), fiscal_code, birth_date)
         )
 
         insert_usr_to_cstmr = db.insert(
