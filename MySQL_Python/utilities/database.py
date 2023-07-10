@@ -296,7 +296,6 @@ class Database:
         except:
             return -1
 
-
     def delete(
             self,
             table: str,
@@ -305,7 +304,7 @@ class Database:
                 ):
         query = f"DELETE FROM {table} WHERE {column} = %s"
         try:
-            self.__execute_query(query, (value,))
+            self.__execute_query(query, (value,), disable_fetchall=True)
             return 0
         except:
             return -1

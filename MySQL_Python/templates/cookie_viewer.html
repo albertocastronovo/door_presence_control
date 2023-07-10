@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>Cookie Viewer</title>
+    </head>
+    <body>
+        <h1>Cookie Viewer</h1>
+        <table>
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Value</th>
+                </tr>
+            </thead>
+            <tbody id="table-body"></tbody>
+        </table>
+        <script>
+            const cookies = getCookies();
+            const tableBody = document.getElementById('table-body');
+            for (const cookie of cookies) {
+                const row = document.createElement('tr');
+                const nameCell = document.createElement('td');
+                const valueCell = document.createElement('td');
+                nameCell.textContent = cookie.name;
+                valueCell.textContent = cookie.value;
+                row.appendChild(nameCell);
+                row.appendChild(valueCell);
+                tableBody.appendChild(row);
+            }
+
+            function getCookies() {
+                const cookies = document.cookie.split(';');
+                const result = [];
+                for (const cookie of cookies) {
+                    const trimmedCookie = cookie.trim();
+                    const nameValue = trimmedCookie.split('=');
+                    const name = nameValue[0];
+                    const value = nameValue[1];
+                    result.push({ name, value });
+                }
+                return result;
+            }
+        </script>
+    </body>
+</html>

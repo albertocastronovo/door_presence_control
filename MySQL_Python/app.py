@@ -684,6 +684,6 @@ def create_user():
 
 if __name__ == '__main__':
     try:
-        app.run(host="192.168.1.192", port=5000, debug=True, ssl_context="adhoc")
+        app.run(host="localhost", port=5000, debug=True, ssl_context="adhoc")
     finally:
         scheduler.shutdown()

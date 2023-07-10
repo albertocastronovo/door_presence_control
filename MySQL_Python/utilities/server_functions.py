@@ -14,6 +14,13 @@ def get_user_password(database: Database, user: str) -> str | None:
     except IndexError:
         return None
 
+
+def change_password(database: Database, user: str, new_password: str) -> bool:
+    new_password_hash = password_hash(new_password)
+    query = database.update("user", "password", new_password_hash, "username", user)
+    return query == 0
+
+
 def name_from_rfid(database: Database, rfid: str) -> str | None:
     query = database.select_col_where("user", "name", "RFID_key", rfid)
     try:
