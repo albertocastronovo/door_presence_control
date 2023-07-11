@@ -1,18 +1,14 @@
 # Import the Flask class and other extensions from the flask module
-from flask import Flask, jsonify, request \
-    # , render_template, url_for, redirect, flash, g, abort, session
-from flask import make_response
+from flask import Flask, jsonify, request, make_response
 from functools import wraps
 import jwt
 from pytz_deprecation_shim import PytzUsageWarning
 from utilities.server_functions import get_user_password, password_verify, password_hash, get_user_statistics, \
-    get_id_from_user, get_all_roles, get_user_working_hours \
-    # , get_role_from_ids, random_secure_password, date_to_str, validate_rfid_event
+    get_id_from_user, get_all_roles, get_user_working_hours
 from utilities.database import Database
-from apscheduler.schedulers.background import BackgroundScheduler
+# from apscheduler.schedulers.background import BackgroundScheduler
 import os
 from datetime import datetime, timedelta
-# import requests
 import warnings
 import json
 
@@ -40,8 +36,8 @@ db.connect_as(
     password=""
 )
 
-users_permissions = {}
-pending_user_creations = {}
+# users_permissions = {}
+# pending_user_creations = {}
 
 
 # Function to verify the JWT token
@@ -62,19 +58,19 @@ def token_required(f):
     return decorated
 
 
-def update_users_permissions():
-    global users_permissions
-    users_permissions = {r["name"]: r for r in db.select_all("roles")}
-
-
-update_users_permissions()
-scheduler = BackgroundScheduler()
-scheduler.add_job(
-    func=update_users_permissions,
-    trigger="cron",
-    hour=3
-)
-scheduler.start()
+# def update_users_permissions():
+#     global users_permissions
+#     users_permissions = {r["name"]: r for r in db.select_all("roles")}
+#
+#
+# update_users_permissions()
+# scheduler = BackgroundScheduler()
+# scheduler.add_job(
+#     func=update_users_permissions,
+#     trigger="cron",
+#     hour=3
+# )
+# scheduler.start()
 
 
 # def permissions_required(flag_list):
@@ -118,8 +114,15 @@ def signup():
 @app.route('/update_user', methods=['POST'])
 @token_required
 def update_user():
+
     username = request.headers.get("username")
     user = request.json["new_username"]
+
+    # check unique username
+    for d in db.select_col("user", "username"):
+        if user == d["username"]:
+            return jsonify({"status": "error", "message": "Username already exists."}), 409
+
     prefix = request.json["prefix"]
     phone_number = request.json["phone_number"]
     email = request.json["email"]
@@ -137,20 +140,8 @@ def update_user():
         where_column="fiscal_code",
         where_value=username
     )
-    # Check if there is another person with the same username --> check_username()
 
     return jsonify({"status": "success", "message": "User information updated successfully!"})
-
-
-#
-# # --> here
-# @app.route('/check_username', methods=['POST'])
-# def check_username():
-#     username = request.form["username"]
-#     saved_hash = get_user_password(db, username)
-#     if saved_hash is not None:
-#         return jsonify({"exists": True})
-#     return jsonify({"exists": False})
 
 
 @app.route('/new_password', methods=['POST'])
@@ -615,7 +606,5 @@ def login():
 
 
 if __name__ == '__main__':
-    try:
-        app.run(host="localhost", debug=True)
-    finally:
-        scheduler.shutdown()
+    app.run(host="localhost", debug=True)
+
