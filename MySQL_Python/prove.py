@@ -1,4 +1,5 @@
 from utilities.database import Database
+from utilities.server_functions import *
 
 db = Database(
     host="localhost",
@@ -16,9 +17,10 @@ all_usrs = db.select_col("user", "username")
 
 print(all_usrs)
 
-for d in all_usrs:
-    if "utente1" == d["username"]:
-        print("esiste già")
+all_usrs_except_you = [d for d in all_usrs if d["username"] != "utente1"]
+
+print(all_usrs_except_you)
+
 
 # filtered_usrs = db.select_col_where("user", "username", "gender", "Male")
 #

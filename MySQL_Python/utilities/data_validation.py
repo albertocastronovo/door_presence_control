@@ -1,7 +1,7 @@
 from re import compile, match
 
 
-username_validator = compile(r"^(?=[a-zA-Z0-9_]{8,20}$)(?!.*_{2})[^_].*[^_]$")
+username_validator = compile(r"^(?=[a-zA-Z0-9_]{7,20}$)(?!.*_{2})[^_].*[^_]$")
 password_validator = compile(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,32}$")
 user_id_validator = compile(r"^(?=(?:[^AEIOU]*[A-Z]){6})[A-Z]{6}[0-9]{2}[A-Z][0-9]{2}[A-Z][0-9]{3}[A-Z]$")
 customer_id_validator = compile(r"^[A-Z]{2}[0-9]{11}$")
