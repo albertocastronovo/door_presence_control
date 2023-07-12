@@ -16,8 +16,8 @@ from copy import deepcopy
 from auth.auth import oauth_init
 from decorators.user_checks import login_required, required_permissions, role_permissions
 
-server_ip = "192.168.1.192"
-server_port = "5000"
+server_ip = "192.168.43.56"
+server_port = 5000
 
 # create the application object
 app = Flask(__name__)
@@ -36,8 +36,8 @@ while True:
     )
 
     db.connect_as(
-        user="alberto",
-        password="root"
+        user="root",
+        password=""
     )
     if db.is_connected():
         print(f"Connected to database.")
@@ -97,7 +97,7 @@ def test_hours():
 
 @app.route('/login/google')
 def google_login():
-    redirect_uri = url_for('google_authorize', _external=True)
+    redirect_uri = f"https://{server_ip}.nip.io:{server_port}/authorize/google"
     return oauth.google.authorize_redirect(redirect_uri)
 
 
@@ -684,6 +684,6 @@ def create_user():
 
 if __name__ == '__main__':
     try:
-        app.run(host="localhost", port=5000, debug=True, ssl_context="adhoc")
+        app.run(host=server_ip, port=server_port, debug=True, ssl_context="adhoc")
     finally:
         scheduler.shutdown()

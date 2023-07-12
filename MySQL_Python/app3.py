@@ -5,7 +5,8 @@ from flask import (
 )
 from flask_mail import Mail, Message
 from flask_jwt_extended import (
-    JWTManager, jwt_required, create_access_token, get_jwt_identity, verify_jwt_in_request
+    JWTManager, jwt_required, create_access_token, get_jwt_identity, verify_jwt_in_request,
+    create_refresh_token, get_jwt
 )
 from apscheduler.schedulers.background import BackgroundScheduler
 import time
@@ -103,8 +104,18 @@ scheduler.add_job(      # clear RFID mode user creation dictionaries at 3 AM eve
 )
 scheduler.start()
 
+# token blacklist
+
+token_blacklist = set()
+
+
+@jwt.token_in_blocklist_loader
+def is_token_in_blacklist(token):
+    jti = token["jti"]
+    return jti in token_blacklist
 
 # adding the new HTTP errors
+
 
 @app.errorhandler(DoorHTTPException)
 def handle_error(error):
@@ -117,9 +128,10 @@ reset_user_creations()
 # app routes
 
 
-@app.route("/test_mail", methods=["GET", "POST"])
-def test_mail():
-    pass
+@app.route("/", methods=["GET"])
+@jwt_required()
+def home():
+    return jsonify({"msg": "hello world"}), 200
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -145,12 +157,32 @@ def login():
             return jsonify({"msg": "Wrong username/password"}), 401
 
         access_token = create_access_token(identity=user)
+        refresh_token = create_refresh_token(identity=user)
 
         return jsonify({"access_token": access_token,
+                        "refresh_token": refresh_token,
                         "msg": "Login successful",
                         "logged_user": user,
                         "impersonated_user": user
                         }), 200
+
+
+@app.route("/refresh_token", methods=["POST"])
+@jwt_required(refresh=True)
+def refresh_token():
+    current_user = get_jwt_identity()
+    return jsonify({"access_token": create_access_token(identity=current_user)}), 200
+
+
+@app.route("/logout", methods=["GET", "POST", "DELETE"])
+@jwt_required()
+def logout():
+    if request.method == "GET":
+        return render_template("logout.html")
+    else:
+        jti = get_jwt()["jti"]
+        token_blacklist.add(jti)
+        return jsonify({"msg": "Logout successful"}), 200
 
 
 @app.route("/reset_password", methods=["GET", "POST"])
@@ -176,6 +208,11 @@ def reset_link(user, code):
         return render_template("change_password.html", user=user, code=code)
     else:
         print("entered reset POST")
+        if user is None and code is None:
+            str_args = request.json.get("verification_code")
+            user = str_args[0]
+            code = str_args[1]
+
         is_correct = verify_recovery_code(db, user, code)
         if not is_correct:
             return jsonify({"msg": "Invalid or expired code"}), 401

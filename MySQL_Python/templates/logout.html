@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Logout Button</title>
+</head>
+<body>
+	<button onclick="logout()">Logout</button>
+
+	<script>
+		function logout() {
+			fetch('/logout', {
+				method: 'DELETE'
+			})
+			.then(response => {
+				if (response.ok) {
+					// Redirect to login page or homepage
+					window.location.replace('/login');
+				} else {
+					alert('Error logging out');
+				}
+			})
+			.catch(error => {
+				console.error('Error logging out:', error);
+				alert('Error logging out');
+			});
+		}
+	</script>
+</body>
+</html>
