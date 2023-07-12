@@ -26,3 +26,5 @@ def validate_data(data_string: str | None, data_type: str) -> bool:
     if data_type not in patterns:
         return False
     return match(patterns[data_type], data_string) is not None
+
+validate_data("pippo", "username")
