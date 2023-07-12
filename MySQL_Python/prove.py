@@ -12,10 +12,14 @@ db.connect_as(
 )
 
 all_usrs = db.select_col("user", "username")
-# it return a list of json dictionaties: [{'username': 'utente1'}, ... , {'username': 'yasmin'}]
+# list of json dictionaties: [{'username': 'utente1'}, ... , {'username': 'yasmin'}]
 
 print(all_usrs)
 
-filtered_usrs = db.select_col_where("user", "username", "gender", "Male")
+for d in all_usrs:
+    if "utente1" == d["username"]:
+        print("esiste già")
 
-print(filtered_usrs)
+# filtered_usrs = db.select_col_where("user", "username", "gender", "Male")
+#
+# print(filtered_usrs)

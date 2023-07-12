@@ -1,18 +1,14 @@
 # Import the Flask class and other extensions from the flask module
-from flask import Flask, jsonify, request \
-    # , render_template, url_for, redirect, flash, g, abort, session
-from flask import make_response
+from flask import Flask, jsonify, request, make_response
 from functools import wraps
 import jwt
 from pytz_deprecation_shim import PytzUsageWarning
 from utilities.server_functions import get_user_password, password_verify, password_hash, get_user_statistics, \
-    get_id_from_user, get_all_roles, get_user_working_hours \
-    # , get_role_from_ids, random_secure_password, date_to_str, validate_rfid_event
+    get_id_from_user, get_all_roles, get_user_working_hours
 from utilities.database import Database
-from apscheduler.schedulers.background import BackgroundScheduler
+# from apscheduler.schedulers.background import BackgroundScheduler
 import os
 from datetime import datetime, timedelta
-# import requests
 import warnings
 import json
 
@@ -40,8 +36,9 @@ db.connect_as(
     password=""
 )
 
-users_permissions = {}
-pending_user_creations = {}
+
+# users_permissions = {}
+# pending_user_creations = {}
 
 
 # Function to verify the JWT token
@@ -62,19 +59,19 @@ def token_required(f):
     return decorated
 
 
-def update_users_permissions():
-    global users_permissions
-    users_permissions = {r["name"]: r for r in db.select_all("roles")}
-
-
-update_users_permissions()
-scheduler = BackgroundScheduler()
-scheduler.add_job(
-    func=update_users_permissions,
-    trigger="cron",
-    hour=3
-)
-scheduler.start()
+# def update_users_permissions():
+#     global users_permissions
+#     users_permissions = {r["name"]: r for r in db.select_all("roles")}
+#
+#
+# update_users_permissions()
+# scheduler = BackgroundScheduler()
+# scheduler.add_job(
+#     func=update_users_permissions,
+#     trigger="cron",
+#     hour=3
+# )
+# scheduler.start()
 
 
 # def permissions_required(flag_list):
@@ -120,6 +117,12 @@ def signup():
 def update_user():
     username = request.headers.get("username")
     user = request.json["new_username"]
+
+    # check unique username
+    for d in db.select_col("user", "username"):
+        if user == d["username"]:
+            return jsonify({"status": "error", "message": "Username already exists."}), 409
+
     prefix = request.json["prefix"]
     phone_number = request.json["phone_number"]
     email = request.json["email"]
@@ -137,20 +140,8 @@ def update_user():
         where_column="fiscal_code",
         where_value=username
     )
-    # Check if there is another person with the same username --> check_username()
 
     return jsonify({"status": "success", "message": "User information updated successfully!"})
-
-
-#
-# # --> here
-# @app.route('/check_username', methods=['POST'])
-# def check_username():
-#     username = request.form["username"]
-#     saved_hash = get_user_password(db, username)
-#     if saved_hash is not None:
-#         return jsonify({"exists": True})
-#     return jsonify({"exists": False})
 
 
 @app.route('/new_password', methods=['POST'])
@@ -163,29 +154,6 @@ def new_password():
         table="user",
         set_column="password",
         set_value=password_hash(newPassword),
-        where_column="username",
-        where_value=username
-    )
-
-    return jsonify({"status": "success", "message": "User information updated successfully!"})
-
-
-@app.route('/change_profile_data', methods=['POST'])
-@token_required
-def change_profile_data():
-    username = request.headers.get("username")
-    user = request.json["new_username"]
-    prefix = request.json["prefix"]
-    phone_number = request.json["phone_number"]
-    email = request.json["email"]
-    address = request.json["address"]
-    gender = request.json["gender"]
-
-    update = db.update_multiple(
-        table="user",
-        column_names=["username", "phone_number", "email", "address", "gender",
-                      "flag_phone", "flag_mail", "flag_password_changed"],
-        column_values=[user, prefix + phone_number, email, address, gender, 1, 1, 1],
         where_column="username",
         where_value=username
     )
@@ -225,6 +193,55 @@ def stats():
     }
 
     return jsonify(response)
+
+
+@app.route('/change_profile_data', methods=['POST'])
+@token_required
+def change_profile_data():
+    username = request.headers.get("username")
+
+    user = request.json.get("new_username")  # Use get method to allow for empty field
+
+    # check unique username
+    if user is not None:  # Only check if field is not empty
+        for d in db.select_col("user", "username"):
+            if user == d["username"]:
+                return jsonify({"status": "error", "message": "Username already exists."}), 409
+
+    prefix = request.json.get("prefix", "")  # Use get method with default value to allow for empty field
+    phone_number = request.json.get("phone_number", "")  # Use get method with default value to allow for empty field
+    email = request.json.get("email", "")  # Use get method with default value to allow for empty field
+    address = request.json.get("address", "")  # Use get method with default value to allow for empty field
+    gender = request.json.get("gender", "")  # Use get method with default value to allow for empty field
+
+    # Only update fields that are not empty
+    column_names = []
+    column_values = []
+    if user is not None and user != "":
+        column_names.append("username")
+        column_values.append(user)
+    if prefix != "" and phone_number != "":
+        column_names.append("phone_number")
+        column_values.append(prefix + phone_number)
+    if email != "":
+        column_names.append("email")
+        column_values.append(email)
+    if address != "":
+        column_names.append("address")
+        column_values.append(address)
+    if gender != "":
+        column_names.append("gender")
+        column_values.append(gender)
+
+    update = db.update_multiple(
+        table="user",
+        column_names=column_names,
+        column_values=column_values,
+        where_column="username",
+        where_value=username
+    )
+
+    return jsonify({"status": "success", "message": "User information updated successfully!"})
 
 
 @app.route('/usr_update', methods=['GET', 'POST', 'PUT', 'DELETE'])
@@ -269,7 +286,8 @@ def usr_update():
             print(user_ids)
 
             # Get the username values corresponding to the userIDs found in the user table
-            result = [db.select_col_where("user", "username", "fiscal_code", user_id)[0]["username"] for user_id in user_ids if db.select_where('user', 'fiscal_code', user_id)]
+            result = [db.select_col_where("user", "username", "fiscal_code", user_id)[0]["username"] for user_id in
+                      user_ids if db.select_where('user', 'fiscal_code', user_id)]
 
             # Remove from the list the username that corresponds to the person who is performing the action
             result.remove(user)
@@ -280,7 +298,6 @@ def usr_update():
             return result_dict
 
         usernames = get_usernames_by_role_and_vat(role, vat)
-        all_usrs = db.select_col("user", "username")
 
         return jsonify(usernames)
 
@@ -313,38 +330,72 @@ def usr_update():
         json_to_string = request.headers.get("user")
         query = extract_name_from_string(json_to_string)
         print(query)
+        fiscal_code_query = db.select_col_where("user", "fiscal_code", "username", query)[0]["fiscal_code"]
 
-        name = request.json['name']
-        surname = request.json['surname']
-        username = request.json['username']
-        password = request.json['password']
-        fiscal_code = request.json['fiscal_code']
-        prefix = request.json["prefix"]
-        phone_number = request.json["phone_number"]
-        email = request.json["email"]
-        address = request.json["address"]
-        gender = request.json["gender"]
-        ## manca data di nascita!
+        username = request.json.get("new_username", "")  # Use get method to allow for empty field
+        name = request.json.get("name", "")
+        surname = request.json.get("surname", "")
+        password = request.json.get('password', "")
+        fiscal_code = request.json.get("fiscal_code", "")
+        birthdate = request.json.get("birthdate", "")
+        prefix = request.json.get("prefix", "")
+        phone_number = request.json.get("phone_number", "")
+        email = request.json.get("email", "")
+        address = request.json.get("address", "")
+        gender = request.json.get("gender", "")
 
-        update_usr = db.update_multiple(
+        # Only update fields that are not empty
+        column_names = []
+        column_values = []
+        if username is not None and user != "":
+            for d in db.select_col("user", "username"):  # check unique username
+                if username == d["username"]:
+                    return jsonify({"status": "error", "message": "Username already exists."}), 409
+            column_names.append("username")
+            column_values.append(username)
+        if prefix != "" and phone_number != "":
+            column_names.append("phone_number")
+            column_values.append(prefix + phone_number)
+        if email != "":
+            column_names.append("email")
+            column_values.append(email)
+        if address != "":
+            column_names.append("address")
+            column_values.append(address)
+        if gender != "":
+            column_names.append("gender")
+            column_values.append(gender)
+        if name != "":
+            column_names.append("name")
+            column_values.append(name)
+        if surname != "":
+            column_names.append("surname")
+            column_values.append(surname)
+        if password != "":
+            column_names.append("password")
+            column_values.append(password_hash(password))
+        if fiscal_code != "":
+            column_names.append("fiscal_code")
+            column_values.append(fiscal_code)
+        if birthdate != "":
+            column_names.append("birth_date")
+            column_values.append(birthdate)
+
+        update = db.update_multiple(
             table="user",
-            column_names=["name", "surname", "username", "password", "fiscal_code",
-                          "phone_number", "email", "address", "gender"],
-            column_values=[name, surname, username, password_hash(password), fiscal_code,
-                           prefix + phone_number, email, address, gender],
+            column_names=column_names,
+            column_values=column_values,
             where_column="username",
             where_value=query
         )
 
-        ### COME INDIVIDUO UNIVOCAMENTE L'UTENTE SE DEVO CAMBIARE IL COD. FISCALE? ###
-
-        # update_usr_to_cstmr = db.update(
-        #     table="user_to_customer",
-        #     set_column="userID",
-        #     set_value=fiscal_code,
-        #     where_column="userID",
-        #     where_value="FISCALCODE" ???
-        # )
+        update_usr_to_cstmr = db.update(
+            table="user_to_customer",
+            set_column="userID",
+            set_value=fiscal_code,
+            where_column="userID",
+            where_value=fiscal_code_query
+        )
 
         return jsonify({"status": "success", "message": "User information updated successfully!"})
 
@@ -615,7 +666,4 @@ def login():
 
 
 if __name__ == '__main__':
-    try:
-        app.run(host="localhost", debug=True)
-    finally:
-        scheduler.shutdown()
+    app.run(host="localhost", debug=True)
