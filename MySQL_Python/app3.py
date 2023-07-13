@@ -1,7 +1,7 @@
 # standard libraries imports
 
 from flask import (
-    Flask, jsonify, request, render_template, make_response
+    Flask, jsonify, request, render_template, make_response, url_for
 )
 from flask_mail import Mail, Message
 from flask_jwt_extended import (
@@ -10,12 +10,16 @@ from flask_jwt_extended import (
 )
 from apscheduler.schedulers.background import BackgroundScheduler
 import time
+import requests
 import os
+import json
 
 # custom modules imports
 
 from utilities.server_functions import (
-    get_geninfo_from_user, change_password, get_user_password
+    get_geninfo_from_user, change_password, get_user_password,
+    validate_rfid_event, name_from_rfid, get_user_rfid, fiscal_code_from_rfid,
+    interact_with_area
 )
 from utilities.database import Database
 from utilities.custom_http_errors import DoorHTTPException
@@ -57,8 +61,8 @@ while True:
     )
 
     db.connect_as(
-        user="alberto",
-        password="root"
+        user="root",
+        password=""
     )
     if db.is_connected():
         print(f"Connected to database.")
@@ -110,7 +114,7 @@ token_blacklist = set()
 
 
 @jwt.token_in_blocklist_loader
-def is_token_in_blacklist(token):
+def is_token_in_blacklist(header, token):
     jti = token["jti"]
     return jti in token_blacklist
 
@@ -134,15 +138,27 @@ def home():
     return jsonify({"msg": "hello world"}), 200
 
 
+@app.route("/cookies", methods=["GET"])
+def cookies():
+    return render_template("cookie_viewer.html")
+
+@app.route("/test")
+def test():
+    interact_with_area(db, "CST1234ECC", "MVEF666")
+    return "OK"
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "GET":
         return render_template("basic_login.html")
     else:
         user = request.form.get("username", None)
+        from_browser = True
         pw = request.form.get("password", None)
         if user is None:
             user = request.json.get("username", None)
+            from_browser = False
         if pw is None:
             pw = request.json.get("password", None)
         if user is None or pw is None:
@@ -158,6 +174,11 @@ def login():
 
         access_token = create_access_token(identity=user)
         refresh_token = create_refresh_token(identity=user)
+
+        if from_browser:    # save the token in a secure cookie
+            response = make_response("Login successful!")
+            response.set_cookie("access_token", access_token, secure=True)
+            return response
 
         return jsonify({"access_token": access_token,
                         "refresh_token": refresh_token,
@@ -230,6 +251,122 @@ def reset_link(user, code):
         change_password(db, user, new_password)
         print("the password was changed")
         return jsonify({"msg": "Password successfully changed"}), 200
+
+
+#   DOOR ACCESS ROUTES
+
+
+@app.route("/door", methods=["POST"])
+def access_door():
+    print(request.json)
+    rfid = request.json.get("rfid", None)
+    door_id = request.json.get("door_id", None)
+    door_id_ex = request.json.get("door_id_ex", None)
+    is_qr = request.json.get("is_qr", False)
+    is_dac = request.json.get("is_dac", False)
+
+    if rfid is None or door_id is None or door_id_ex is None:
+        return jsonify({"msg": "Invalid door parameters."}), 461
+    print("before validate")
+    request_status = validate_rfid_event(
+        db=db,
+        rfid=rfid,
+        door_id=door_id_ex
+    )
+    print(request_status)
+    if request_status != 0:
+        return jsonify({"msg": "Invalid RFID event."}), 460
+    print("after validate: {}")
+    if not is_qr and not is_dac:
+        remote_addr = request.remote_addr
+    else:
+        remote_addr = request.json.get("door_ip")
+        if remote_addr is None:
+            return jsonify({"msg": "Invalid door IP."}), 461
+    print(remote_addr)
+    door_status = requests.get(f"http://{remote_addr}:5000/door")
+    if not door_status.ok:
+        return jsonify({"msg": "Could not communicate with the door."}), 462
+
+    door_command = {"command": "open"}
+    headers = {"Content-type": "application/json"}
+    set_door = requests.post(f"http://{remote_addr}:5000/door", json=door_command, headers=headers)
+    if not set_door.ok:
+        return jsonify({"msg": "Door status not set."}), 464
+    username = name_from_rfid(db, rfid)
+    if username is None or len(username) < 2:
+        return jsonify({"msg": "Problems in the display name."}), 200
+
+    send_name = requests.post(f"http://{remote_addr}:4999/welcome/{username}", headers=headers)
+    fiscal_code = fiscal_code_from_rfid(db, rfid)
+    interact_with_area(db, fiscal_code, door_id_ex)
+
+    return jsonify({"msg": "success"}), 200
+
+
+@app.route("/access_door_from_dac", methods=["POST"])
+def access_door_from_dac():
+    user = request.json.get("username", None)
+    pw = request.json.get("password", None)
+    door_id = request.json.get("door_id", None)
+    if user is None or pw is None or door_id is None:
+        return jsonify({"msg": "Invalid request. Username and password required."}), 400
+    saved_hash = get_user_password(db, user)
+    if saved_hash is None:
+        return jsonify({"msg": "Invalid username or password."}), 401
+    is_verified = password_verify(pw, saved_hash)
+    if not is_verified:
+        return jsonify({"msg": "Invalid username or password."}), 401
+
+    rfid = get_user_rfid(db, user)
+    request_data = {"rfid": rfid, "door_id": door_id, "is_dac": True, "door_ip": request.remote_addr}
+    request_json = json.dumps(request_data)
+    headers = {"Content-type": "application/json"}
+    print("up to here, it's all fine")
+    try:
+        request_access = requests.post(f"https://{app_ip}:{app_port}/{url_for('access_door')}", json=request_data, verify=False, headers=headers)
+    except:
+        print("exception was here")
+    print("fine even here?")
+    return jsonify({"msg": "Request sent to main open function"}), 200
+
+
+@app.route("/door_qr/<door_id>/<door_ip>", methods=["GET", "POST"])
+def qr_request_from_browser(door_id, door_ip):
+    access_token = request.cookies.get("access_token", None)
+    if access_token is None:
+        return jsonify({"msg": "No access token in cookies."}), 400
+    headers = {"Authorization": f"Bearer {access_token}", "Content-type": "application/json"}
+    json_data = {"door_id": door_id, "door_ip": door_ip}
+    request_access = requests.post(
+        f"https://{app_ip}:{app_port}/access_door_from_qr",
+        json=json_data,
+        headers=headers,
+        verify=False
+                                   )
+    return jsonify({"msg": "Request sent."}), 200
+
+
+@app.route("/access_door_from_qr", methods=["POST"])
+@jwt_required()
+def access_door_from_qr():
+    door_id = request.json.get("door_id", None)
+    door_ip = request.json.get("door_ip", None)
+
+    if door_id is None or door_ip is None:
+        return jsonify({"mag": "Invalid arguments"}), 461
+    rfid = get_user_rfid(db, get_jwt_identity())
+    if rfid is None:
+        return jsonify({"msg": "Could not find user RFID."}), 460
+    request_data = {
+        "rfid": str(rfid),
+        "door_id": str(door_id),
+        "is_qr": True,
+        "door_ip": door_ip
+    }
+    request_access = requests.post(f"https://{app_ip}:{app_port}/{url_for('access_door')}", json=request_data, verify=False)
+    return jsonify({"msg": "Request sent to main open function"}), request_access.status_code
+
 
 # end of routes
 
