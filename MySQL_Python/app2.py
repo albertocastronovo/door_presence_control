@@ -318,15 +318,6 @@ def usr_update():
     role = db.select_col_where("user_to_customer", "role", "userID", fiscal_code_user)[0]["role"]
     vat = db.select_col_where("user_to_customer", "cusID", "userID", fiscal_code_user)[0]["cusID"]
 
-    def extract_name_from_string(data_string):  # FA SCHIFO MA FUNZIONA
-        try:
-            data_dict = json.loads(data_string)
-            value = next(iter(data_dict.values()))
-            name = value.strip('"')
-            return name
-        except (json.JSONDecodeError, AttributeError, StopIteration):
-            return None
-
     if request.method == 'GET':
 
         if role == "SA":
