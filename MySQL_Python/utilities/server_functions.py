@@ -331,3 +331,55 @@ def get_user_statistics(dictionary):
     json_statistics = json.dumps(statistics)
 
     return json_statistics
+
+
+def get_usernames_by_role_and_vat(
+        db: Database,
+        role: str,
+        vat: str,
+        user: str
+):
+
+    # Get rows where cusID equals vat from the user_to_customer table
+    user_to_customer_rows = db.select_where('user_to_customer', 'cusID', vat)
+
+    # Get the row where role equals the given role from the permissions table
+    role_row = db.select_where('permissions', 'role', role)
+
+    # Get the column names with value 1, except for the 'code' column
+    columns_with_1 = [
+        column_name for column_name, value in role_row[0].items() if value == 1 and column_name != 'code'
+    ]
+
+    # Filter the user_to_customer_rows based on the role
+    filtered_rows = [
+        row for row in user_to_customer_rows if row['role'] in columns_with_1
+    ]
+
+    # Get the userIDs from the filtered rows
+    user_ids = [row['userID'] for row in filtered_rows]
+    print(user_ids)
+
+    # Get the username values corresponding to the userIDs found in the user table
+    result = [db.select_col_where("user", "username", "fiscal_code", user_id)[0]["username"] for user_id in
+              user_ids if db.select_where('user', 'fiscal_code', user_id)]
+
+    print(result)
+
+    # Remove from the list the username that corresponds to the person who is performing the action
+    result.remove(user)
+
+    # Convert in a dictionary
+    result_dict = [{'username': usrnm} for usrnm in result]
+
+    return result_dict
+
+
+def extract_name_from_string(data_string):  # FA SCHIFO MA FUNZIONA
+    try:
+        data_dict = json.loads(data_string)
+        value = next(iter(data_dict.values()))
+        name = value.strip('"')
+        return name
+    except (json.JSONDecodeError, AttributeError, StopIteration):
+        return None

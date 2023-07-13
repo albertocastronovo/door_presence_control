@@ -4,13 +4,12 @@ from functools import wraps
 import jwt
 from pytz_deprecation_shim import PytzUsageWarning
 from utilities.server_functions import get_user_password, password_verify, password_hash, get_user_statistics, \
-    get_id_from_user, get_all_roles, get_user_working_hours
+    get_id_from_user, get_all_roles, get_user_working_hours, get_usernames_by_role_and_vat, extract_name_from_string
 from utilities.database import Database
 # from apscheduler.schedulers.background import BackgroundScheduler
 import os
 from datetime import datetime, timedelta
 import warnings
-import json
 
 warnings.filterwarnings("ignore", category=PytzUsageWarning)
 
@@ -198,6 +197,7 @@ def stats():
 @app.route('/change_profile_data', methods=['POST'])
 @token_required
 def change_profile_data():
+
     username = request.headers.get("username")
 
     user = request.json.get("new_username")  # Use get method to allow for empty field
@@ -247,57 +247,22 @@ def change_profile_data():
 @app.route('/usr_update', methods=['GET', 'POST', 'PUT', 'DELETE'])
 @token_required
 def usr_update():
+
     user = request.headers.get("username")
     fiscal_code_user = db.select_col_where("user", "fiscal_code", "username", user)[0]["fiscal_code"]
     role = db.select_col_where("user_to_customer", "role", "userID", fiscal_code_user)[0]["role"]
     vat = db.select_col_where("user_to_customer", "cusID", "userID", fiscal_code_user)[0]["cusID"]
 
-    def extract_name_from_string(data_string):  # FA SCHIFO MA FUNZIONA
-        try:
-            data_dict = json.loads(data_string)
-            value = next(iter(data_dict.values()))
-            name = value.strip('"')
-            return name
-        except (json.JSONDecodeError, AttributeError, StopIteration):
-            return None
-
     if request.method == 'GET':
 
-        def get_usernames_by_role_and_vat(role: str, vat: str):
+        if role == "SA":
 
-            # Get rows where cusID equals vat from the user_to_customer table
-            user_to_customer_rows = db.select_where('user_to_customer', 'cusID', vat)
+            all_usrs = db.select_col("user", "username")
+            all_usrs_except_you = [d for d in all_usrs if d["username"] != user]
 
-            # Get the row where role equals the given role from the permissions table
-            role_row = db.select_where('permissions', 'role', role)
+            return jsonify(all_usrs_except_you)
 
-            # Get the column names with value 1, except for the 'code' column
-            columns_with_1 = [
-                column_name for column_name, value in role_row[0].items() if value == 1 and column_name != 'code'
-            ]
-
-            # Filter the user_to_customer_rows based on the role
-            filtered_rows = [
-                row for row in user_to_customer_rows if row['role'] in columns_with_1
-            ]
-
-            # Get the userIDs from the filtered rows
-            user_ids = [row['userID'] for row in filtered_rows]
-            print(user_ids)
-
-            # Get the username values corresponding to the userIDs found in the user table
-            result = [db.select_col_where("user", "username", "fiscal_code", user_id)[0]["username"] for user_id in
-                      user_ids if db.select_where('user', 'fiscal_code', user_id)]
-
-            # Remove from the list the username that corresponds to the person who is performing the action
-            result.remove(user)
-
-            # Convert in a dictionary
-            result_dict = [{'username': usrnm} for usrnm in result]
-
-            return result_dict
-
-        usernames = get_usernames_by_role_and_vat(role, vat)
+        usernames = get_usernames_by_role_and_vat(db, role, vat, user)
 
         return jsonify(usernames)
 
@@ -347,7 +312,7 @@ def usr_update():
         # Only update fields that are not empty
         column_names = []
         column_values = []
-        if username is not None and user != "":
+        if username != "":
             for d in db.select_col("user", "username"):  # check unique username
                 if username == d["username"]:
                     return jsonify({"status": "error", "message": "Username already exists."}), 409
@@ -389,13 +354,15 @@ def usr_update():
             where_value=query
         )
 
-        update_usr_to_cstmr = db.update(
-            table="user_to_customer",
-            set_column="userID",
-            set_value=fiscal_code,
-            where_column="userID",
-            where_value=fiscal_code_query
-        )
+        if fiscal_code != "":
+
+            update_usr_to_cstmr = db.update(
+                table="user_to_customer",
+                set_column="userID",
+                set_value=fiscal_code,
+                where_column="userID",
+                where_value=fiscal_code_query
+            )
 
         return jsonify({"status": "success", "message": "User information updated successfully!"})
 
