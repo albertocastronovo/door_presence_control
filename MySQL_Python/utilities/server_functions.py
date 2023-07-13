@@ -367,7 +367,31 @@ def get_usernames_by_role_and_vat(
     print(result)
 
     # Remove from the list the username that corresponds to the person who is performing the action
-    result.remove(user)
+    if user in result:
+        result.remove(user)
+
+    # Convert in a dictionary
+    result_dict = [{'username': usrnm} for usrnm in result]
+
+    return result_dict
+
+
+def get_only_users(
+        db: Database,
+        vat: str,
+):
+    # Get rows where cusID equals vat from the user_to_customer table
+    user_to_customer_rows = db.select_where('user_to_customer', 'cusID', vat)
+
+    # Get only USRs
+    only_usrs_rows = [d for d in user_to_customer_rows if d["role"] == "USR"]
+
+    # Get the userIDs from the filtered rows
+    user_ids = [row['userID'] for row in only_usrs_rows]
+
+    # Get the username values corresponding to the userIDs found in the user table
+    result = [db.select_col_where("user", "username", "fiscal_code", user_id)[0]["username"] for user_id in
+              user_ids if db.select_where('user', 'fiscal_code', user_id)]
 
     # Convert in a dictionary
     result_dict = [{'username': usrnm} for usrnm in result]
@@ -383,3 +407,46 @@ def extract_name_from_string(data_string):  # FA SCHIFO MA FUNZIONA
         return name
     except (json.JSONDecodeError, AttributeError, StopIteration):
         return None
+
+
+def get_companies_by_role_and_vat(
+        db: Database,
+        role: str,
+        vat: str,
+        user: str
+):
+
+    # Get rows where cusID equals vat from the user_to_customer table
+    user_to_customer_rows = db.select_where('user_to_customer', 'cusID', vat)
+
+    # Get the row where role equals the given role from the permissions table
+    role_row = db.select_where('permissions', 'role', role)
+
+    # Get the column names with value 1, except for the 'code' column
+    columns_with_1 = [
+        column_name for column_name, value in role_row[0].items() if value == 1 and column_name != 'code'
+    ]
+
+    # Filter the user_to_customer_rows based on the role
+    filtered_rows = [
+        row for row in user_to_customer_rows if row['role'] in columns_with_1
+    ]
+
+    # Get the userIDs from the filtered rows
+    user_ids = [row['userID'] for row in filtered_rows]
+    print(user_ids)
+
+    # Get the username values corresponding to the userIDs found in the user table
+    result = [db.select_col_where("user", "username", "fiscal_code", user_id)[0]["username"] for user_id in
+              user_ids if db.select_where('user', 'fiscal_code', user_id)]
+
+    print(result)
+
+    # Remove from the list the username that corresponds to the person who is performing the action
+    if user in result:
+        result.remove(user)
+
+    # Convert in a dictionary
+    result_dict = [{'username': usrnm} for usrnm in result]
+
+    return result_dict
