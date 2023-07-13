@@ -66,7 +66,7 @@ def company_from_prefix(database: Database, door_prefix: str) -> str | None:
 def interact_with_area(database: Database, user: str, door_id: str) -> bool:
     company_id = company_from_prefix(database, door_id[:4])
     table_name = company_id.lower() + "_user_to_area"
-    past_query = database.select_wheres(table_name, "user", user, "area_id", door_id)
+    past_query = database.select_wheres(table_name, "user", user, "area_id", door_id[4:])
 
     try:
         last_time = past_query[0]["last_interaction_time"]
@@ -75,17 +75,17 @@ def interact_with_area(database: Database, user: str, door_id: str) -> bool:
             delta = datetime.now() - last_time
             seconds = int(delta.total_seconds())
             if is_door_main(database, door_id):
-                add_working_hours(database, user, company_id, door_id, seconds)  # add the amount to its working hours
+                add_working_hours(database, user, company_id, door_id[4:], seconds)  # add the amount to its working hours
         new_state = 1 - last_state
         new_query = database.update_multiple_wheres(
-            table_name, ["is_inside", "last_interaction_time"], [new_state, datetime.now()], "user", user, "area_id", door_id
+            table_name, ["is_inside", "last_interaction_time"], [new_state, datetime.now()], "user", user, "area_id", door_id[4:]
         )
         return new_query == 0
     except IndexError:
         last_time = datetime.now()
         last_state = 0
         insert_query = database.insert(
-            table_name, ("user", "area_id", "is_inside", "last_interaction_time"), (user, door_id, 1, datetime.now())
+            table_name, ("user", "area_id", "is_inside", "last_interaction_time"), (user, door_id[4:], 1, datetime.now())
         )
         return insert_query == 0
 

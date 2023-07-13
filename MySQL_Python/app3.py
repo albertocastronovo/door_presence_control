@@ -30,7 +30,7 @@ from auth.auth import oauth_init
 
 # app configuration
 
-app_ip = "192.168.43.56"
+app_ip = "192.168.1.192"
 app_port = 5000
 
 app = Flask(__name__)
@@ -141,6 +141,11 @@ def home():
 @app.route("/cookies", methods=["GET"])
 def cookies():
     return render_template("cookie_viewer.html")
+
+@app.route("/test")
+def test():
+    interact_with_area(db, "CST1234ECC", "MVEF666")
+    return "OK"
 
 
 @app.route("/login", methods=["GET", "POST"])
