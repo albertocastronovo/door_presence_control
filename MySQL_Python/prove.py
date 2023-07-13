@@ -24,18 +24,14 @@ db.connect_as(
 
 user = "utente2"
 fiscal_code_user = db.select_col_where("user", "fiscal_code", "username", user)[0]["fiscal_code"]
-role = db.select_col_where("user_to_customer", "role", "userID", fiscal_code_user)[0]["role"]
+# role = db.select_col_where("user_to_customer", "role", "userID", fiscal_code_user)[0]["role"]
 vat = db.select_col_where("user_to_customer", "cusID", "userID", fiscal_code_user)[0]["cusID"]
 
 # Get rows where cusID equals vat from the user_to_customer table
 user_to_customer_rows = db.select_where('user_to_customer', 'cusID', vat)
-only_usrs_rows = [d for d in user_to_customer_rows if d["role"] == "USR"]
-
-print(user_to_customer_rows)
-print(only_usrs_rows)
 
 # Get the userIDs from the filtered rows
-user_ids = [row['userID'] for row in only_usrs_rows]
+user_ids = [row['userID'] for row in user_to_customer_rows]
 print(user_ids)
 
 # Get the username values corresponding to the userIDs found in the user table
@@ -47,7 +43,6 @@ print(result)
 # Remove from the list the username that corresponds to the person who is performing the action
 if user in result:
     result.remove(user)
-    print(result)
 
 # Convert in a dictionary
 result_dict = [{'username': usrnm} for usrnm in result]
