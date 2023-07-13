@@ -8,6 +8,10 @@ from datetime import datetime
 from re import match
 
 
+def does_username_exist(database: Database, username: str) -> bool:
+    query = database.select_where("user", "username", username)
+    return len(query) > 0
+
 def am_i_sa(database: Database, user_id: str) -> bool:
     query = database.select_col_where("user_to_customer", "role", "userID", user_id)
     try:

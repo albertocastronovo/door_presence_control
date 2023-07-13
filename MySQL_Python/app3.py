@@ -1,12 +1,12 @@
 # standard libraries imports
 
 from flask import (
-    Flask, jsonify, request, render_template, make_response, url_for
+    Flask, jsonify, request, render_template, make_response, url_for, redirect
 )
 from flask_mail import Mail, Message
 from flask_jwt_extended import (
     JWTManager, jwt_required, create_access_token, get_jwt_identity, verify_jwt_in_request,
-    create_refresh_token, get_jwt
+    create_refresh_token, get_jwt, decode_token
 )
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime
@@ -23,7 +23,7 @@ from utilities.server_functions import (
     validate_rfid_event, name_from_rfid, get_user_rfid, fiscal_code_from_rfid, is_rfid_unique,
     interact_with_area, company_from_prefix,
     password_hash,
-    get_id_from_user, get_role_from_ids, am_i_sa, is_role_higher
+    get_id_from_user, get_role_from_ids, am_i_sa, is_role_higher, does_username_exist
 )
 from utilities.database import Database
 from utilities.custom_http_errors import DoorHTTPException
@@ -391,34 +391,61 @@ def create_user_from_browser():
     access_token = request.cookies.get("access_token", None)
     if access_token is None:
         return jsonify({"msg": "No access token in cookies."}), 460
+
     headers = {"Authorization": f"Bearer {access_token}", "Content-type": "application/json"}
-    json_data = request.json
-    json_data["ac"] = access_token
+    # json_data = request.json
+    # json_data["ac"] = access_token
+
     request_creation = requests.get(
         f"https://{app_ip}:{app_port}/createuser",
-        json=json_data,
+        # json=json_data,
         headers=headers,
         verify=False
     )
-    return jsonify({"msg": "Request sent successfully."}), 200
+    print(request_creation.status_code)
+    return request_creation.content
 
 
 @app.route("/createuser", methods=["GET", "POST"])
-@jwt_required()
+@jwt_required(optional=True)
 def create_user_route():
+
+    logged_user = get_jwt_identity()
+    if logged_user is None:     # no token in the header. check the cookies.
+        access_token = request.cookies.get("access_token", None)
+        if access_token is None:
+            return jsonify({"msg": "No valid access token."}), 400
+        token = decode_token(access_token)
+        if "sub" not in token or "exp" not in token:
+            return jsonify({"msg": "Invalid token in cookies."}), 400
+        expiration = datetime.fromtimestamp(token["exp"])
+        if expiration < datetime.now():
+            return jsonify({"msg": "Token has expired."}), 400
+        if not does_username_exist(db, token["sub"]):
+            return jsonify({"msg": "Invalid token in cookies."}), 400
+        my_username = token["sub"]
+    else:
+        my_username = logged_user
+
     if request.method == "GET":
         return render_template("create_user.html")
     else:
+
+        if not request.is_json:
+            req_data = request.form
+        else:
+            req_data = request.json
+        print(req_data)
         global pending_user_creations
-        mode = request.json.get("creation_mode")
-        my_username = get_jwt_identity()
+        mode = req_data.get("registration_type")
         my_id = get_id_from_user(db, my_username)
+
         if am_i_sa(db, my_id):
             creation_permitted = True
 
         else:
-            company_id = request.json.get("customer_id")
-            user_role = request.json.get("role")
+            company_id = req_data.get("company_id")
+            user_role = req_data.get("role")
             my_role = get_role_from_ids(db, my_id, company_id)
             creation_permitted = is_role_higher(my_role, user_role)
 
@@ -433,11 +460,16 @@ def create_user_route():
                 pending_user_creations[door_id].append(request.json)
             else:
                 pending_user_creations[door_id] = [request.json]
+            exit_status = 0
+        elif mode == "manual":
+            pass
+            print("manual mode")
+            #exit_status = create_user(request.json)
         else:
-            create_user(request.json)
+            pass    # invalid mode
 
-        print(request.json)
         return jsonify({"msg": "Request successful."}), 200
+        ## MANCA LA CONVERSIONE DEI TEMPI: QUA HO START E END DI TUTTO, VANNO UNITI INSIEME A COPPIE
 
 
 @app.route("/cardforuser", methods=["POST"])
