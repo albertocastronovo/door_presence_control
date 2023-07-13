@@ -16,6 +16,11 @@ def get_user_password(database: Database, user: str) -> str | None:
         return None
 
 
+def is_rfid_unique(database: Database, rfid: str) -> bool:
+    query = database.select_where("user", "rfid", rfid)
+    return len(query) == 0
+
+
 def change_password(database: Database, user: str, new_password: str) -> bool:
     print(f"new password: {new_password}")
     new_password_hash = password_hash(new_password)
@@ -32,12 +37,14 @@ def name_from_rfid(database: Database, rfid: str) -> str | None:
     except IndexError:
         return None
 
+
 def fiscal_code_from_rfid(database: Database, rfid: str) -> str | None:
     query = database.select_col_where("user", "fiscal_code", "RFID_key", rfid)
     try:
         return str(query[0]["fiscal_code"])
     except IndexError:
         return None
+
 
 def get_user_rfid(database: Database, user: str) -> str | None:
     query = database.select_col_where("user", "RFID_key", "username", user)
@@ -256,7 +263,9 @@ def validate_rfid_event(
     if len(user_utc) == 0:
         return -5  # no user with that user ID in the company with that company ID
 
-    if time_validation(user_utc) != 0:
+    user_acc = db.select_where(company_id.lower() + "_access", "user_id", user_id)
+
+    if time_validation(user_acc) != 0:
         return -6  # the user may not enter today or at this time
 
     if not door_access_permissions(db, company_id, user_id, door_id):
@@ -268,7 +277,7 @@ def validate_rfid_event(
 
 
 def door_access_permissions(database: Database, company_id: str, user_id: str, door_id: str):
-    query_regex = database.select_wheres("user_to_customer", "cusID", company_id, "userID", user_id)
+    query_regex = database.select_where(company_id.lower() + "_access", "user_id", user_id)
     try:
         access_permissions = str(query_regex[0]["access_permissions"])
     except (IndexError, KeyError):
