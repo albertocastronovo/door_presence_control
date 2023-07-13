@@ -8,6 +8,36 @@ from datetime import datetime
 from re import match
 
 
+def am_i_sa(database: Database, user_id: str) -> bool:
+    query = database.select_col_where("user_to_customer", "role", "userID", user_id)
+    try:
+        for q in query:
+            if q["role"] == "SA":
+                return True
+        return False
+    except (IndexError, KeyError):
+        return False
+
+
+def is_role_higher(role_1: str, role_2: str) -> bool:
+    if role_1 == "SA" and role_2 == "SA":
+        return False
+
+    if role_1 == "USR":
+        return False
+
+    if role_1 == "SA" and role_2 != "SA":
+        return True
+
+    if role_1 == "CO" and role_2 in ["USR", "CO"]:
+        return True
+
+    if role_1 == "CA" and role_2 in ["USR", "CO", "CA"]:
+        return True
+
+    return False
+
+
 def get_user_password(database: Database, user: str) -> str | None:
     query = database.select_col_where("user", "password", "username", user)
     try:
