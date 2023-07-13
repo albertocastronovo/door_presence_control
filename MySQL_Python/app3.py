@@ -9,6 +9,8 @@ from flask_jwt_extended import (
     create_refresh_token, get_jwt
 )
 from apscheduler.schedulers.background import BackgroundScheduler
+from datetime import datetime
+from copy import deepcopy
 import time
 import requests
 import os
@@ -18,8 +20,9 @@ import json
 
 from utilities.server_functions import (
     get_geninfo_from_user, change_password, get_user_password,
-    validate_rfid_event, name_from_rfid, get_user_rfid, fiscal_code_from_rfid,
-    interact_with_area
+    validate_rfid_event, name_from_rfid, get_user_rfid, fiscal_code_from_rfid, is_rfid_unique,
+    interact_with_area, company_from_prefix,
+    password_hash
 )
 from utilities.database import Database
 from utilities.custom_http_errors import DoorHTTPException
@@ -96,12 +99,12 @@ def reset_user_creations():
 # scheduler configuration
 
 scheduler = BackgroundScheduler()
-scheduler.add_job(      # update user permissions from database at 3 AM every day (local machine time)
+scheduler.add_job(  # update user permissions from database at 3 AM every day (local machine time)
     func=update_users_permissions,
     trigger="cron",
     hour=3
 )
-scheduler.add_job(      # clear RFID mode user creation dictionaries at 3 AM every day (local machine time)
+scheduler.add_job(  # clear RFID mode user creation dictionaries at 3 AM every day (local machine time)
     func=reset_user_creations,
     trigger="cron",
     hour=3
@@ -118,6 +121,7 @@ def is_token_in_blacklist(header, token):
     jti = token["jti"]
     return jti in token_blacklist
 
+
 # adding the new HTTP errors
 
 
@@ -128,6 +132,7 @@ def handle_error(error):
 
 update_users_permissions()
 reset_user_creations()
+
 
 # app routes
 
@@ -141,6 +146,7 @@ def home():
 @app.route("/cookies", methods=["GET"])
 def cookies():
     return render_template("cookie_viewer.html")
+
 
 @app.route("/test")
 def test():
@@ -172,10 +178,19 @@ def login():
         if not is_verified:
             return jsonify({"msg": "Wrong username/password"}), 401
 
+        flag_psw_query = db.select_col_where("user", "flag_password_changed", "username", user)
+        try:
+            flag_psw = flag_psw_query[0]["flag_password_changed"]
+            if flag_psw == 0:
+                return jsonify({"msg": "The user has to register first!"}), 461
+
+        except (IndexError, KeyError):
+            return jsonify({"msg": "Error in retrieving user flags"}), 461
+
         access_token = create_access_token(identity=user)
         refresh_token = create_refresh_token(identity=user)
 
-        if from_browser:    # save the token in a secure cookie
+        if from_browser:  # save the token in a secure cookie
             response = make_response("Login successful!")
             response.set_cookie("access_token", access_token, secure=True)
             return response
@@ -253,7 +268,7 @@ def reset_link(user, code):
         return jsonify({"msg": "Password successfully changed"}), 200
 
 
-#   DOOR ACCESS ROUTES
+####    DOOR INTERFACE ROUTES   ####
 
 
 @app.route("/door", methods=["POST"])
@@ -324,7 +339,8 @@ def access_door_from_dac():
     headers = {"Content-type": "application/json"}
     print("up to here, it's all fine")
     try:
-        request_access = requests.post(f"https://{app_ip}:{app_port}/{url_for('access_door')}", json=request_data, verify=False, headers=headers)
+        request_access = requests.post(f"https://{app_ip}:{app_port}/{url_for('access_door')}", json=request_data,
+                                       verify=False, headers=headers)
     except:
         print("exception was here")
     print("fine even here?")
@@ -343,7 +359,7 @@ def qr_request_from_browser(door_id, door_ip):
         json=json_data,
         headers=headers,
         verify=False
-                                   )
+    )
     return jsonify({"msg": "Request sent."}), 200
 
 
@@ -364,11 +380,129 @@ def access_door_from_qr():
         "is_qr": True,
         "door_ip": door_ip
     }
-    request_access = requests.post(f"https://{app_ip}:{app_port}/{url_for('access_door')}", json=request_data, verify=False)
+    request_access = requests.post(f"https://{app_ip}:{app_port}/{url_for('access_door')}", json=request_data,
+                                   verify=False)
     return jsonify({"msg": "Request sent to main open function"}), request_access.status_code
 
 
+@app.route("/cardforuser", methods=["POST"])
+def assign_rfid_to_queued_user():
+    global accepted_user_creations
+    global rejected_user_creations
+    global pending_user_creations
+
+    door_id = request.json.get("door_id", None)
+    door_id_ex = request.json.get("door_id_ex", None)
+    rfid = request.json.get("rfid", None)
+    #   timestamp_str = request.json.get("timestamp", None)
+    content = request.json.get("content", None)
+    if door_id is None or door_id_ex is None or rfid is None or content is None:
+        return jsonify({"msg": "Invalid request. Missing arguments."}), 461
+    #   timestamp = datetime.strptime(timestamp_str, "%y-%m-%d %H:%M:%S")
+    if door_id_ex not in pending_user_creations:        # no user enqueued on the selected door
+        return jsonify({"msg": "No user enqueued for this door interface."}), 460
+
+    if len(pending_user_creations[door_id_ex]) < 1:     # same thing
+        return jsonify({"msg": "No user enqueued for this door interface."}), 460
+
+    # check if the RFID card is unique, not associated to any other user
+    unique_rfid = is_rfid_unique(db, rfid)
+    if not unique_rfid:
+        return jsonify({"msg": "The RFID tag is already associated to another user."}), 461
+
+    pending_data = deepcopy(pending_user_creations[door_id_ex][0])
+    pending_data["rfid"] = rfid
+    pending_data["temp_password"] = content
+
+    creation_status = create_user(pending_data)
+
+    if creation_status:
+        if door_id_ex not in accepted_user_creations:
+            accepted_user_creations[door_id_ex] = [pending_data]
+        else:
+            accepted_user_creations[door_id_ex].append(pending_data)
+    else:
+        if door_id_ex not in rejected_user_creations:
+            rejected_user_creations[door_id_ex] = [pending_data]
+        else:
+            rejected_user_creations[door_id_ex].append(pending_data)
+    del pending_user_creations[door_id_ex][0]
+
+    return jsonify({"msg": "Request completed."}), 200
+
 # end of routes
+
+
+def create_user(user_data: dict) -> bool:
+    fiscal_code = user_data.get("fiscal_code", None)
+    temp_password = user_data.get("temp_password", None)
+    rfid = user_data.get("rfid", None)
+    role = user_data.get("role", "USR")
+    access_permissions = user_data.get("access_permissions", "^\d$")
+    whitelist = user_data.get("whitelist", True)
+
+    vacation_dates = user_data.get("vacation_dates", "")
+    whitelist_dates = user_data.get("whitelist_dates", "")
+    time_mon = user_data.get("time_mon", "")
+    time_tue = user_data.get("time_tue", "")
+    time_wed = user_data.get("time_wed", "")
+    time_thu = user_data.get("time_thu", "")
+    time_fri = user_data.get("time_fri", "")
+    time_sat = user_data.get("time_sat", "")
+    time_sun = user_data.get("time_sun", "")
+
+    if rfid is None:
+        return False
+
+    flag_pw_changed = user_data.get("flag_pw_changed", False)
+    company_id = user_data.get("company_id", None)
+    if company_id is None:
+        company_id = company_from_prefix(db, rfid[:4])
+        if company_id is None:
+            return False
+
+    if fiscal_code is None or temp_password is None:
+        return False
+
+    # validate data against their regex
+    is_data_valid = True
+    is_data_valid = is_data_valid and validate_data(fiscal_code, "user_id")
+    is_data_valid = is_data_valid and validate_data(temp_password, "password")
+    is_data_valid = is_data_valid and validate_data(rfid, "rfid")
+    is_data_valid = is_data_valid and validate_data(company_id, "customer_id")
+
+    if not is_data_valid:
+        return False
+
+    # check if the user exists in the tables
+
+    user_query = db.select_where("user", "fiscal_code", fiscal_code)
+    utc_query = db.select_wheres("user_to_customer", "userID", fiscal_code, "cusID", company_id)
+    acc_query = db.select_where(company_id.lower() + "_access", "user_id", fiscal_code)
+    if len(user_query) != 0 or len(utc_query) != 0 or len(acc_query) != 0:
+        return False
+
+    # if not present anywhere, create it
+
+    db.insert("user",
+              ("password", "fiscal_code", "RFID_key", "flag_password_changed"),
+              (password_hash(temp_password), fiscal_code, rfid, flag_pw_changed)
+              )
+    db.insert("user_to_customer",
+              ("cusID", "userID", "role"),
+              (company_id, fiscal_code, role)
+              )
+    db.insert(company_id.lower() + "_access",
+              ("user_id", "access_permissions", "whitelist",
+               "time_mon", "time_tue", "time_wed", "time_thu", "time_fri", "time_sat", "time_sun",
+               "vacation_dates", "whitelist_dates"
+               ),
+              (fiscal_code, access_permissions, whitelist,
+               time_mon, time_tue, time_wed, time_thu, time_fri, time_sat, time_sun,
+               vacation_dates, whitelist_dates
+               )
+              )
+    return True
 
 
 if __name__ == "__main__":
