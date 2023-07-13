@@ -2,11 +2,12 @@
 from flask import Flask, jsonify, request, make_response
 from functools import wraps
 import jwt
+from flask_jwt_extended import get_jwt_identity
 from pytz_deprecation_shim import PytzUsageWarning
 from utilities.server_functions import get_user_password, password_verify, password_hash, get_user_statistics, \
-    get_id_from_user, get_all_roles, get_user_working_hours, get_usernames_by_role_and_vat, extract_name_from_string
+    get_id_from_user, get_all_roles, get_user_working_hours, get_usernames_by_role_and_vat, extract_name_from_string, \
+    get_only_users
 from utilities.database import Database
-# from apscheduler.schedulers.background import BackgroundScheduler
 import os
 from datetime import datetime, timedelta
 import warnings
@@ -19,10 +20,8 @@ app.secret_key = os.getenv("door_secret")
 
 # Configuring the secret and duration of the JWT token
 app.config['JWT_SECRET_KEY'] = 'jwt-secret-key'
-app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(minutes=10)
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(minutes=30)
 
-# Set session to be permanent and set its lifetime
-# app.permanent_session_lifetime = timedelta(minutes=10)
 
 db = Database(
     host="localhost",
@@ -34,10 +33,6 @@ db.connect_as(
     user="root",
     password=""
 )
-
-
-# users_permissions = {}
-# pending_user_creations = {}
 
 
 # Function to verify the JWT token
@@ -56,38 +51,6 @@ def token_required(f):
         return f(*args, **kwargs)
 
     return decorated
-
-
-# def update_users_permissions():
-#     global users_permissions
-#     users_permissions = {r["name"]: r for r in db.select_all("roles")}
-#
-#
-# update_users_permissions()
-# scheduler = BackgroundScheduler()
-# scheduler.add_job(
-#     func=update_users_permissions,
-#     trigger="cron",
-#     hour=3
-# )
-# scheduler.start()
-
-
-# def permissions_required(flag_list):
-#     def wrapper_function(f):
-#         @wraps(f)
-#         def wrapper(*args, **kwargs):
-#             permissions = session["permissions"]
-#             for flag in flag_list:
-#                 print(f"flag: {flag}")
-#                 if not permissions.get(flag, False):
-#                     print(f"invalid flag: {flag}")
-#                     return
-#             return f(*args, **kwargs)
-#
-#         return wrapper
-#
-#     return wrapper_function
 
 
 @app.route('/signup', methods=['POST'])
@@ -175,6 +138,26 @@ def extract_from_db():
         return jsonify({"message": "User not found."})
 
 
+@app.route('/db_company_data', methods=['GET'])
+@token_required
+def extract_from_company_db():
+
+    user = request.headers.get("username")
+    fiscal_code_user = db.select_col_where("user", "fiscal_code", "username", user)[0]["fiscal_code"]
+    vat = db.select_col_where("user_to_customer", "cusID", "userID", fiscal_code_user)[0]["cusID"]
+
+    user_fetch = db.select_where(
+        table="customer",
+        column="cusID",
+        value=vat
+    )
+
+    if user_fetch:
+        return jsonify(user_fetch[0])
+    else:
+        return jsonify({"message": "Company not found."})
+
+
 @app.route('/view_statistics', methods=['GET'])
 @token_required
 def stats():
@@ -199,7 +182,6 @@ def stats():
 def change_profile_data():
 
     username = request.headers.get("username")
-
     user = request.json.get("new_username")  # Use get method to allow for empty field
 
     # check unique username
@@ -404,8 +386,6 @@ def usr_update():
 @token_required
 def rfid_card_management():
     user = request.headers.get("username")
-    print(user)
-
     rfid_key = db.select_col_where("user", "RFID_key", "username", user)[0]["RFID_key"]
 
     if request.method == 'GET':
@@ -439,6 +419,7 @@ def rfid_card_management():
         return jsonify({'message': 'RFID card updated'})
 
     elif request.method == 'DELETE':
+
         # Delete the RFID card from the database
         update = db.update(
             table="user",
@@ -448,6 +429,32 @@ def rfid_card_management():
             where_value=user
         )
         return jsonify({'message': 'RFID card deleted'})
+
+
+@app.route('/get_USRs', methods=['GET'])
+@token_required
+def get_usrs():
+
+    user = request.headers.get("username")
+    fiscal_code_user = db.select_col_where("user", "fiscal_code", "username", user)[0]["fiscal_code"]
+    vat = db.select_col_where("user_to_customer", "cusID", "userID", fiscal_code_user)[0]["cusID"]
+    role = db.select_col_where("user_to_customer", "role", "userID", fiscal_code_user)[0]["role"]
+    
+    if role == 'USR':
+        result_dict = get_only_users(db, vat)
+    else:
+        result_dict = get_usernames_by_role_and_vat(db, role, vat, user)
+
+    return jsonify(result_dict)
+
+
+@app.route('/get_companies', methods=['GET'])
+@token_required
+def get_companies():
+
+    all_companies = db.select_col("customer", "name")
+
+    return jsonify(all_companies)
 
 
 @app.route('/login', methods=['POST'])
@@ -467,20 +474,6 @@ def login():
         return jsonify({"exists": False}, {"registered": False}, roles)
     flag_psw = db.select_col_where("user", "flag_password_changed", "username", user)[0]["flag_password_changed"]
     print(flag_psw)
-
-    response = make_response("success")
-
-    # ??? #
-
-    if flag_psw == 0:
-        response.set_cookie("exists", "true")
-        response.set_cookie("registered", "false")
-        response.set_cookie("roles", "example_roles")
-
-        return response
-
-    # ??? #
-
     fiscal_code = get_id_from_user(db, user)
     roles = get_all_roles(db, fiscal_code)
     print(roles)
@@ -488,6 +481,19 @@ def login():
     token = jwt.encode({'username': user, 'exp': datetime.utcnow() + app.config['JWT_ACCESS_TOKEN_EXPIRES']},
                        app.config['JWT_SECRET_KEY'], algorithm='HS256')
     return jsonify({"exists": True}, {"registered": True}, roles, {"token": token})
+
+
+@app.route('/impersonate', methods=['GET'])
+@token_required
+def impersonate():
+
+    user_to_impersonate = request.headers.get("username")
+    user_origin = get_jwt_identity()
+    # check
+    fiscal_code = get_id_from_user(db, user_to_impersonate)
+    roles = get_all_roles(db, fiscal_code)
+    print(roles)
+    return jsonify(roles)
 
 
 ##### TO WRITE DOWN THE NEW LOGOUT FUNCTION #####
