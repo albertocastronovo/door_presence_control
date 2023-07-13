@@ -6,11 +6,13 @@ from flask_jwt_extended import get_jwt_identity
 from pytz_deprecation_shim import PytzUsageWarning
 from utilities.server_functions import get_user_password, password_verify, password_hash, get_user_statistics, \
     get_id_from_user, get_all_roles, get_user_working_hours, get_usernames_by_role_and_vat, extract_name_from_string, \
-    get_only_users
+    get_only_users, get_all_from_your_company
 from utilities.database import Database
+# from apscheduler.schedulers.background import BackgroundScheduler
 import os
 from datetime import datetime, timedelta
 import warnings
+import json
 
 warnings.filterwarnings("ignore", category=PytzUsageWarning)
 
@@ -22,6 +24,8 @@ app.secret_key = os.getenv("door_secret")
 app.config['JWT_SECRET_KEY'] = 'jwt-secret-key'
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(minutes=30)
 
+# Set session to be permanent and set its lifetime
+# app.permanent_session_lifetime = timedelta(minutes=10)
 
 db = Database(
     host="localhost",
@@ -33,6 +37,10 @@ db.connect_as(
     user="root",
     password=""
 )
+
+
+# users_permissions = {}
+# pending_user_creations = {}
 
 
 # Function to verify the JWT token
@@ -51,6 +59,38 @@ def token_required(f):
         return f(*args, **kwargs)
 
     return decorated
+
+
+# def update_users_permissions():
+#     global users_permissions
+#     users_permissions = {r["name"]: r for r in db.select_all("roles")}
+#
+#
+# update_users_permissions()
+# scheduler = BackgroundScheduler()
+# scheduler.add_job(
+#     func=update_users_permissions,
+#     trigger="cron",
+#     hour=3
+# )
+# scheduler.start()
+
+
+# def permissions_required(flag_list):
+#     def wrapper_function(f):
+#         @wraps(f)
+#         def wrapper(*args, **kwargs):
+#             permissions = session["permissions"]
+#             for flag in flag_list:
+#                 print(f"flag: {flag}")
+#                 if not permissions.get(flag, False):
+#                     print(f"invalid flag: {flag}")
+#                     return
+#             return f(*args, **kwargs)
+#
+#         return wrapper
+#
+#     return wrapper_function
 
 
 @app.route('/signup', methods=['POST'])
@@ -176,12 +216,55 @@ def stats():
 
     return jsonify(response)
 
+@app.route('/view_statisticsCO', methods=['GET'])
+@token_required
+def statsCO():
+    user = request.headers.get("username")
+    company = request.headers.get("company")
+    print(user)
+    print(company)
+    response = {
+        'totalUSR': [10],
+        'active': [1, 4, 2]
+    }
 
+    return jsonify(response)
+
+@app.route('/view_statisticsCA', methods=['GET'])
+@token_required
+def statsCA():
+    user = request.headers.get("username")
+    company = request.headers.get("company")
+    print(user)
+    print(company)
+
+    response = {
+
+        'totalUSRCOCA': [20],
+        'active': [1, 6, 4]
+    }
+
+    return jsonify(response)
+
+
+@app.route('/get_users_from_company', methods=['GET'])
+def get_users_from_company():
+    company = request.headers.get("company")
+    user = request.headers.get("username")
+    vat = db.select_col_where("customer","cusID","name",company)[0]["cusID"]
+    print(vat)
+    # Chiamata alla funzione get_all_from_your_company per ottenere i dati
+    response = get_all_from_your_company(db, vat, user)
+
+    print(response)
+
+    return jsonify(response)
 @app.route('/change_profile_data', methods=['POST'])
 @token_required
 def change_profile_data():
 
     username = request.headers.get("username")
+
     user = request.json.get("new_username")  # Use get method to allow for empty field
 
     # check unique username
@@ -386,6 +469,8 @@ def usr_update():
 @token_required
 def rfid_card_management():
     user = request.headers.get("username")
+    print(user)
+
     rfid_key = db.select_col_where("user", "RFID_key", "username", user)[0]["RFID_key"]
 
     if request.method == 'GET':
@@ -442,6 +527,9 @@ def get_usrs():
     
     if role == 'USR':
         result_dict = get_only_users(db, vat)
+    elif role == "SA":
+        all_usrs = db.select_col("user", "username")
+        result_dict = [d for d in all_usrs if d["username"] != user]
     else:
         result_dict = get_usernames_by_role_and_vat(db, role, vat, user)
 
@@ -453,6 +541,7 @@ def get_usrs():
 def get_companies():
 
     all_companies = db.select_col("customer", "name")
+    print(all_companies)
 
     return jsonify(all_companies)
 
@@ -474,6 +563,20 @@ def login():
         return jsonify({"exists": False}, {"registered": False}, roles)
     flag_psw = db.select_col_where("user", "flag_password_changed", "username", user)[0]["flag_password_changed"]
     print(flag_psw)
+
+    response = make_response("success")
+
+    # ??? #
+
+    if flag_psw == 0:
+        response.set_cookie("exists", "true")
+        response.set_cookie("registered", "false")
+        response.set_cookie("roles", "example_roles")
+
+        return response
+
+    # ??? #
+
     fiscal_code = get_id_from_user(db, user)
     roles = get_all_roles(db, fiscal_code)
     print(roles)
