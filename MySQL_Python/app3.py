@@ -18,7 +18,8 @@ import json
 
 from utilities.server_functions import (
     get_geninfo_from_user, change_password, get_user_password,
-    validate_rfid_event, name_from_rfid, get_user_rfid
+    validate_rfid_event, name_from_rfid, get_user_rfid, fiscal_code_from_rfid,
+    interact_with_area
 )
 from utilities.database import Database
 from utilities.custom_http_errors import DoorHTTPException
@@ -290,10 +291,11 @@ def access_door():
     username = name_from_rfid(db, rfid)
     if username is None or len(username) < 2:
         return jsonify({"msg": "Problems in the display name."}), 200
-    try:
-        send_name = requests.post(f"http://{remote_addr}:4999/welcome/{username}", headers=headers)
-    except:
-        print("exception was here")
+
+    send_name = requests.post(f"http://{remote_addr}:4999/welcome/{username}", headers=headers)
+    fiscal_code = fiscal_code_from_rfid(db, rfid)
+    interact_with_area(db, fiscal_code, door_id_ex)
+
     return jsonify({"msg": "success"}), 200
 
 

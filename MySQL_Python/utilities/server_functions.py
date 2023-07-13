@@ -32,6 +32,13 @@ def name_from_rfid(database: Database, rfid: str) -> str | None:
     except IndexError:
         return None
 
+def fiscal_code_from_rfid(database: Database, rfid: str) -> str | None:
+    query = database.select_col_where("user", "fiscal_code", "RFID_key", rfid)
+    try:
+        return str(query[0]["fiscal_code"])
+    except IndexError:
+        return None
+
 def get_user_rfid(database: Database, user: str) -> str | None:
     query = database.select_col_where("user", "RFID_key", "username", user)
     try:
@@ -60,14 +67,15 @@ def interact_with_area(database: Database, user: str, door_id: str) -> bool:
     company_id = company_from_prefix(database, door_id[:4])
     table_name = company_id.lower() + "_user_to_area"
     past_query = database.select_wheres(table_name, "user", user, "area_id", door_id)
-    print("past query passed")
+
     try:
         last_time = past_query[0]["last_interaction_time"]
         last_state = int(past_query[0]["is_inside"])
         if last_state == 1:     # if the user was inside
             delta = datetime.now() - last_time
             seconds = int(delta.total_seconds())
-            add_working_hours(database, user, company_id, door_id, seconds)  # add the amount to its working hours
+            if is_door_main(database, door_id):
+                add_working_hours(database, user, company_id, door_id, seconds)  # add the amount to its working hours
         new_state = 1 - last_state
         new_query = database.update_multiple_wheres(
             table_name, ["is_inside", "last_interaction_time"], [new_state, datetime.now()], "user", user, "area_id", door_id
@@ -82,6 +90,17 @@ def interact_with_area(database: Database, user: str, door_id: str) -> bool:
         return insert_query == 0
 
 
+def is_door_main(database: Database, door_id_ex: str) -> bool:
+    company_id = company_from_prefix(database, door_id_ex[:4])
+    table = company_id.lower() + "_doors"
+    door_id = door_id_ex[4:]
+    door_data = database.select_where(table, "door_id", door_id)
+    try:
+        return door_data[0]["is_main"] == 1
+    except (IndexError, KeyError):
+        return False
+
+
 def add_working_hours(database: Database, user: str, company_id: str, area_id: str, seconds: int) -> bool:
     table_name = company_id.lower() + "_hours"
     past_hours = database.select_where_many(table_name, ["user", "area_id", "date"], [user, area_id, datetime.now()])
@@ -90,7 +109,7 @@ def add_working_hours(database: Database, user: str, company_id: str, area_id: s
         new_query = database.update_where_many(
             table_name, "seconds_in", seconds + past_secs, ["user", "area_id", "date"], [user, area_id, datetime.now()]
         )
-    except IndexError:
+    except (TypeError, IndexError):
         new_query = database.insert(
             table_name, ("user", "area_id", "date", "seconds_in"), (user, area_id, datetime.now(), seconds)
         )
