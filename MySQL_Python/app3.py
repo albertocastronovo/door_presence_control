@@ -22,7 +22,8 @@ from utilities.server_functions import (
     get_geninfo_from_user, change_password, get_user_password,
     validate_rfid_event, name_from_rfid, get_user_rfid, fiscal_code_from_rfid, is_rfid_unique,
     interact_with_area, company_from_prefix,
-    password_hash
+    password_hash,
+    get_id_from_user, get_role_from_ids, am_i_sa, is_role_higher
 )
 from utilities.database import Database
 from utilities.custom_http_errors import DoorHTTPException
@@ -383,6 +384,60 @@ def access_door_from_qr():
     request_access = requests.post(f"https://{app_ip}:{app_port}/{url_for('access_door')}", json=request_data,
                                    verify=False)
     return jsonify({"msg": "Request sent to main open function"}), request_access.status_code
+
+
+@app.route("/createuserb", methods=["GET"])     # call create user from browser
+def create_user_from_browser():
+    access_token = request.cookies.get("access_token", None)
+    if access_token is None:
+        return jsonify({"msg": "No access token in cookies."}), 460
+    headers = {"Authorization": f"Bearer {access_token}", "Content-type": "application/json"}
+    json_data = request.json
+    json_data["ac"] = access_token
+    request_creation = requests.get(
+        f"https://{app_ip}:{app_port}/createuser",
+        json=json_data,
+        headers=headers,
+        verify=False
+    )
+    return jsonify({"msg": "Request sent successfully."}), 200
+
+
+@app.route("/createuser", methods=["GET", "POST"])
+@jwt_required()
+def create_user_route():
+    if request.method == "GET":
+        return render_template("create_user.html")
+    else:
+        global pending_user_creations
+        mode = request.json.get("creation_mode")
+        my_username = get_jwt_identity()
+        my_id = get_id_from_user(db, my_username)
+        if am_i_sa(db, my_id):
+            creation_permitted = True
+
+        else:
+            company_id = request.json.get("customer_id")
+            user_role = request.json.get("role")
+            my_role = get_role_from_ids(db, my_id, company_id)
+            creation_permitted = is_role_higher(my_role, user_role)
+
+        if not creation_permitted:
+            return jsonify({"msg": "You cannot create a user with that role."}), 462
+
+        if mode == "rfid":
+            door_id = request.json.get("door_id", None)
+            if door_id is None:
+                return jsonify({"msg": "No door id specified."})
+            if door_id in pending_user_creations:
+                pending_user_creations[door_id].append(request.json)
+            else:
+                pending_user_creations[door_id] = [request.json]
+        else:
+            create_user(request.json)
+
+        print(request.json)
+        return jsonify({"msg": "Request successful."}), 200
 
 
 @app.route("/cardforuser", methods=["POST"])
