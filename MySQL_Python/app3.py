@@ -255,16 +255,17 @@ def access_door():
     print(request.json)
     rfid = request.json.get("rfid", None)
     door_id = request.json.get("door_id", None)
+    door_id_ex = request.json.get("door_id_ex", None)
     is_qr = request.json.get("is_qr", False)
     is_dac = request.json.get("is_dac", False)
 
-    if rfid is None or door_id is None:
+    if rfid is None or door_id is None or door_id_ex is None:
         return jsonify({"msg": "Invalid door parameters."}), 461
     print("before validate")
     request_status = validate_rfid_event(
         db=db,
         rfid=rfid,
-        door_id=door_id
+        door_id=door_id_ex
     )
     print(request_status)
     if request_status != 0:

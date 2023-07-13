@@ -5,6 +5,7 @@ from .data_validation import validate_data
 from .door_user import DoorUser
 import json
 from datetime import datetime
+from re import match
 
 
 def get_user_password(database: Database, user: str) -> str | None:
@@ -39,7 +40,24 @@ def get_user_rfid(database: Database, user: str) -> str | None:
         return None
 
 
-def interact_with_area(database: Database, user: str, company_id: str, door_id: str) -> bool:
+def prefix_from_company(database: Database, company_id: str) -> str | None:
+    query = database.select_col_where("customer", "door_prefix", "cusID", company_id)
+    try:
+        return str(query[0]["door_prefix"])
+    except IndexError:
+        return None
+
+
+def company_from_prefix(database: Database, door_prefix: str) -> str | None:
+    query = database.select_col_where("customer", "cusID", "door_prefix", door_prefix)
+    try:
+        return str(query[0]["cusID"])
+    except IndexError:
+        return None
+
+
+def interact_with_area(database: Database, user: str, door_id: str) -> bool:
+    company_id = company_from_prefix(database, door_id[:4])
     table_name = company_id.lower() + "_user_to_area"
     past_query = database.select_wheres(table_name, "user", user, "area_id", door_id)
     print("past query passed")
@@ -194,22 +212,26 @@ def validate_rfid_event(
         rfid: str,
         door_id: str
 ) -> int:
-    door_data = db.select_where("doors", "door_code", door_id)
+    company_id = company_from_prefix(db, door_id[:4])
+    door_table = company_id.lower() + "_doors"
+    door_id = door_id[4:]
+    door_data = db.select_where(door_table, "door_id", door_id)  # CAMBIARE PER CAMBIO TABELLA
+
     if len(door_data) == 0:
         return -1  # the door does not exist in the database
 
     door_data = door_data[0]
-    if not door_data["active"]:
+    if not door_data["is_active"]:
         return -2  # the door exists in the database, but it's not active
 
     user = db.select_where("user", "RFID_key", rfid)
     if len(user) == 0:
         return -3  # the RFID is not associated to any user
+
     elif len(user) > 1:
         return -4  # database error: multiple users with the same RFID key!
 
     user_id = user[0]["fiscal_code"]
-    company_id = door_data["company_id"]
     user_utc = db.select_wheres("user_to_customer", "cusID", company_id, "userID", user_id)[0]
 
     if len(user_utc) == 0:
@@ -218,7 +240,23 @@ def validate_rfid_event(
     if time_validation(user_utc) != 0:
         return -6  # the user may not enter today or at this time
 
+    if not door_access_permissions(db, company_id, user_id, door_id):
+        return -7   # the user has no permissions to enter the area
+
+    # AGGIUNGERE
+
     return 0  # if none of the previous conditions apply, the RFID event is valid
+
+
+def door_access_permissions(database: Database, company_id: str, user_id: str, door_id: str):
+    query_regex = database.select_wheres("user_to_customer", "cusID", company_id, "userID", user_id)
+    try:
+        access_permissions = str(query_regex[0]["access_permissions"])
+    except (IndexError, KeyError):
+        return False
+
+    return match(access_permissions, door_id) is not None
+
 
 
 def day_interval(form, day) -> str | None:
