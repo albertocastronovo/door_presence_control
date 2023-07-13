@@ -442,6 +442,9 @@ def get_usrs():
     
     if role == 'USR':
         result_dict = get_only_users(db, vat)
+    elif role == "SA":
+        all_usrs = db.select_col("user", "username")
+        result_dict = [d for d in all_usrs if d["username"] != user]
     else:
         result_dict = get_usernames_by_role_and_vat(db, role, vat, user)
 
