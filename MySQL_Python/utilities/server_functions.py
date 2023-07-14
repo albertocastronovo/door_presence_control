@@ -51,7 +51,9 @@ def get_user_password(database: Database, user: str) -> str | None:
 
 
 def is_rfid_unique(database: Database, rfid: str) -> bool:
-    query = database.select_where("user", "rfid", rfid)
+    query = database.select_where("user", "RFID_key", rfid)
+    if query is None:
+        return False
     return len(query) == 0
 
 
@@ -297,7 +299,7 @@ def validate_rfid_event(
     if len(user_utc) == 0:
         return -5  # no user with that user ID in the company with that company ID
 
-    user_acc = db.select_where(company_id.lower() + "_access", "user_id", user_id)
+    user_acc = db.select_where(company_id.lower() + "_access", "user_id", user_id)[0]
 
     if time_validation(user_acc) != 0:
         return -6  # the user may not enter today or at this time

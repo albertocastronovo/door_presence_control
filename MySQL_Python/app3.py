@@ -312,8 +312,10 @@ def access_door():
     username = name_from_rfid(db, rfid)
     if username is None or len(username) < 2:
         return jsonify({"msg": "Problems in the display name."}), 200
-
-    send_name = requests.post(f"http://{remote_addr}:4999/welcome/{username}", headers=headers)
+    try:
+        send_name = requests.post(f"http://{remote_addr}:4999/welcome/{username}", headers=headers)
+    except requests.exceptions.ConnectionError:
+        print("Could not send name to the DAC interface.")
     fiscal_code = fiscal_code_from_rfid(db, rfid)
     interact_with_area(db, fiscal_code, door_id_ex)
 
@@ -386,24 +388,10 @@ def access_door_from_qr():
     return jsonify({"msg": "Request sent to main open function"}), request_access.status_code
 
 
-@app.route("/createuserb", methods=["GET"])     # call create user from browser
-def create_user_from_browser():
-    access_token = request.cookies.get("access_token", None)
-    if access_token is None:
-        return jsonify({"msg": "No access token in cookies."}), 460
 
-    headers = {"Authorization": f"Bearer {access_token}", "Content-type": "application/json"}
-    # json_data = request.json
-    # json_data["ac"] = access_token
-
-    request_creation = requests.get(
-        f"https://{app_ip}:{app_port}/createuser",
-        # json=json_data,
-        headers=headers,
-        verify=False
-    )
-    print(request_creation.status_code)
-    return request_creation.content
+@app.route("/displayqueues", methods=["GET"])
+def display_queues():
+    return f"{accepted_user_creations}\n{pending_user_creations}\n{rejected_user_creations}"
 
 
 @app.route("/createuser", methods=["GET", "POST"])
@@ -432,9 +420,9 @@ def create_user_route():
     else:
 
         if not request.is_json:
-            req_data = request.form
+            req_data = request.form.to_dict()
         else:
-            req_data = request.json
+            req_data = request.json.to_dict()
         print(req_data)
         global pending_user_creations
         mode = req_data.get("registration_type")
@@ -453,23 +441,26 @@ def create_user_route():
             return jsonify({"msg": "You cannot create a user with that role."}), 462
 
         if mode == "rfid":
-            door_id = request.json.get("door_id", None)
+            print("rfid mode")
+            door_id = req_data.get("door_id", None)
             if door_id is None:
                 return jsonify({"msg": "No door id specified."})
             if door_id in pending_user_creations:
-                pending_user_creations[door_id].append(request.json)
+                pending_user_creations[door_id].append(req_data)
             else:
-                pending_user_creations[door_id] = [request.json]
+                pending_user_creations[door_id] = [req_data]
             exit_status = 0
         elif mode == "manual":
-            pass
             print("manual mode")
-            #exit_status = create_user(request.json)
+            exit_status = create_user(req_data)
+            print(f"manual exit status: {exit_status}")
         else:
-            pass    # invalid mode
+            return jsonify({"msg": "Invalid creation mode."}), 400
 
-        return jsonify({"msg": "Request successful."}), 200
-        ## MANCA LA CONVERSIONE DEI TEMPI: QUA HO START E END DI TUTTO, VANNO UNITI INSIEME A COPPIE
+        if exit_status == 0:
+            return jsonify({"msg": "Request successful."}), 200
+        else:
+            return jsonify({"msg": "Creation unsuccessful."}), 400
 
 
 @app.route("/cardforuser", methods=["POST"])
@@ -502,8 +493,8 @@ def assign_rfid_to_queued_user():
     pending_data["temp_password"] = content
 
     creation_status = create_user(pending_data)
-
-    if creation_status:
+    print(f"creation status: {creation_status}")
+    if creation_status == 0:
         if door_id_ex not in accepted_user_creations:
             accepted_user_creations[door_id_ex] = [pending_data]
         else:
@@ -520,36 +511,40 @@ def assign_rfid_to_queued_user():
 # end of routes
 
 
-def create_user(user_data: dict) -> bool:
+def create_user(user_data: dict) -> int:
     fiscal_code = user_data.get("fiscal_code", None)
     temp_password = user_data.get("temp_password", None)
     rfid = user_data.get("rfid", None)
     role = user_data.get("role", "USR")
     access_permissions = user_data.get("access_permissions", "^\d$")
-    whitelist = user_data.get("whitelist", True)
+    whitelist = user_data.get("whitelist", "on")
+    if whitelist == "on":
+        whitelist = True
+    else:
+        whitelist = False
 
-    vacation_dates = user_data.get("vacation_dates", "")
-    whitelist_dates = user_data.get("whitelist_dates", "")
-    time_mon = user_data.get("time_mon", "")
-    time_tue = user_data.get("time_tue", "")
-    time_wed = user_data.get("time_wed", "")
-    time_thu = user_data.get("time_thu", "")
-    time_fri = user_data.get("time_fri", "")
-    time_sat = user_data.get("time_sat", "")
-    time_sun = user_data.get("time_sun", "")
+    vacation_dates = user_data.get("vacation_start", "") + "_" + user_data.get("vacation_end", "")
+    whitelist_dates = user_data.get("whitelist_start", "") + "_" + user_data.get("whitelist_end", "")
+    time_mon = user_data.get("monday_start", "") + "-" + user_data.get("monday_end", "")
+    time_tue = user_data.get("tuesday_start", "") + "-" + user_data.get("tuesday_end", "")
+    time_wed = user_data.get("wednesday_start", "") + "-" + user_data.get("wednesday_end", "")
+    time_thu = user_data.get("thursday_start", "") + "-" + user_data.get("thursday_end", "")
+    time_fri = user_data.get("friday_start", "") + "-" + user_data.get("friday_end", "")
+    time_sat = user_data.get("saturday_start", "") + "-" + user_data.get("saturday_end", "")
+    time_sun = user_data.get("sunday_start", "") + "-" + user_data.get("sunday_end", "")
 
     if rfid is None:
-        return False
+        return -1
 
     flag_pw_changed = user_data.get("flag_pw_changed", False)
     company_id = user_data.get("company_id", None)
     if company_id is None:
         company_id = company_from_prefix(db, rfid[:4])
         if company_id is None:
-            return False
+            return -1
 
     if fiscal_code is None or temp_password is None:
-        return False
+        return -1
 
     # validate data against their regex
     is_data_valid = True
@@ -559,7 +554,7 @@ def create_user(user_data: dict) -> bool:
     is_data_valid = is_data_valid and validate_data(company_id, "customer_id")
 
     if not is_data_valid:
-        return False
+        return -2
 
     # check if the user exists in the tables
 
@@ -567,7 +562,7 @@ def create_user(user_data: dict) -> bool:
     utc_query = db.select_wheres("user_to_customer", "userID", fiscal_code, "cusID", company_id)
     acc_query = db.select_where(company_id.lower() + "_access", "user_id", fiscal_code)
     if len(user_query) != 0 or len(utc_query) != 0 or len(acc_query) != 0:
-        return False
+        return -3
 
     # if not present anywhere, create it
 
@@ -589,7 +584,7 @@ def create_user(user_data: dict) -> bool:
                vacation_dates, whitelist_dates
                )
               )
-    return True
+    return 0
 
 
 if __name__ == "__main__":
