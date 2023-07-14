@@ -107,7 +107,10 @@ def company_from_prefix(database: Database, door_prefix: str) -> str | None:
         return None
 
 
-def company_presence_in_areas(database: Database, company_id: str) -> dict[str, int | dict]:
+def company_presence_in_areas(database: Database, company_id: str, roles: list | None = None) -> dict[str, int | dict]:
+    if roles is None:
+        roles = ["USR", "CO", "CA", "SA"]
+
     query_total_company_doors = database.select_all(company_id.lower() + "_doors")
     if query_total_company_doors is None:
         return {"totalUSR": 0, "active": {}}
@@ -123,7 +126,14 @@ def company_presence_in_areas(database: Database, company_id: str) -> dict[str, 
         if query_presence is None:
             people_count = 0
         else:
-            people_count = len(query_presence)
+            people_count = 0
+            for p in query_presence:
+                user_id = p["user"]
+                user_role = get_role_from_ids(database, user_id, company_id)
+                if user_role is None:
+                    user_role = "USR"
+                if user_role in roles:
+                    people_count += 1
 
         out_dict["active"][door_code] = people_count
         if q["is_main"] == 1:
