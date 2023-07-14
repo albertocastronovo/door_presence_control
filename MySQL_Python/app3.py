@@ -24,7 +24,7 @@ from utilities.server_functions import (
     interact_with_area, company_from_prefix,
     password_hash,
     get_id_from_user, get_role_from_ids, am_i_sa, is_role_higher, does_username_exist,
-    company_presence_in_areas
+    company_presence_in_areas, get_user_from_email
 )
 from utilities.database import Database
 from utilities.custom_http_errors import DoorHTTPException
@@ -208,6 +208,36 @@ def login():
                         "logged_user": user,
                         "impersonated_user": user
                         }), 200
+
+
+@app.route('/authorize/google')
+def google_authorize():
+    token = oauth.google.authorize_access_token()
+    resp = oauth.google.get('userinfo')
+    resp.raise_for_status()
+    profile = resp.json()
+    if "email" not in profile or not profile.get("verified_email", False):
+        raise DoorHTTPException.failed_google_auth()
+
+    user_data = get_user_from_email(db, profile["email"])
+    if not user_data:
+        raise DoorHTTPException.email_does_not_exist()
+
+    access_token = create_access_token(identity=user_data["username"])
+    refresh_token = create_refresh_token(identity=user_data["username"])
+
+    return jsonify({"access_token": access_token,
+                    "refresh_token": refresh_token,
+                    "msg": "Login successful",
+                    "logged_user": user_data["username"],
+                    "impersonated_user": user_data["username"]
+                    }), 200
+
+
+@app.route('/login/google')
+def google_login():
+    redirect_uri = f"https://{app_ip}.nip.io:{app_port}/authorize/google"
+    return oauth.google.authorize_redirect(redirect_uri)
 
 
 @app.route("/refresh_token", methods=["POST"])

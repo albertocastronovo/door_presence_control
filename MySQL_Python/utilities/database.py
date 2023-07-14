@@ -5,6 +5,8 @@ from mysql.connector import errorcode as ec
 from mysql.connector.connection_cext import CMySQLConnection
 from mysql.connector.cursor_cext import CMySQLCursor
 
+for handler in logging.root.handlers[:]:
+    logging.root.removeHandler(handler)
 logger = logging.getLogger("mysql.connector")
 logger.setLevel(logging.INFO)
 formatter_str = "[%(asctime)s] [%(name)s] [%(levelname)s] - %(message)s"
