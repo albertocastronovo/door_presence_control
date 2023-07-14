@@ -35,9 +35,8 @@ from auth.auth import oauth_init
 
 # app configuration
 
-app_ip = "192.168.1.192"
+app_ip = "192.168.35.72"
 app_port = 5000
-
 app = Flask(__name__)
 
 app.config["SECRET_KEY"] = os.getenv("door_secret")
@@ -61,7 +60,7 @@ retry_seconds = 10
 while True:
     db = Database(
         host="localhost",
-        database="door_cntrl_system",
+        database="door_cntrl_system2",
         port=3306
     )
 
