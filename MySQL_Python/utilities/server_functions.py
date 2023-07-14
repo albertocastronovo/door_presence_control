@@ -12,6 +12,7 @@ def does_username_exist(database: Database, username: str) -> bool:
     query = database.select_where("user", "username", username)
     return len(query) > 0
 
+
 def am_i_sa(database: Database, user_id: str) -> bool:
     query = database.select_col_where("user_to_customer", "role", "userID", user_id)
     try:
@@ -104,6 +105,32 @@ def company_from_prefix(database: Database, door_prefix: str) -> str | None:
         return str(query[0]["cusID"])
     except IndexError:
         return None
+
+
+def company_presence_in_areas(database: Database, company_id: str) -> dict[str, int | dict]:
+    query_total_company_doors = database.select_all(company_id.lower() + "_doors")
+    if query_total_company_doors is None:
+        return {"totalUSR": 0, "active": {}}
+    out_dict = {"active": {}}
+    print(query_total_company_doors)
+    for q in query_total_company_doors:
+        door_code = q["door_id"]
+        query_presence = database.select_wheres(
+            company_id.lower() + "_user_to_area",
+            "area_id", door_code,
+            "is_inside", 1
+        )
+        if query_presence is None:
+            people_count = 0
+        else:
+            people_count = len(query_presence)
+
+        out_dict["active"][door_code] = people_count
+        if q["is_main"] == 1:
+            out_dict["totalUSR"] = people_count
+
+    return out_dict
+
 
 
 def interact_with_area(database: Database, user: str, door_id: str) -> bool:
@@ -552,6 +579,7 @@ def get_companies_by_role_and_vat(
     result_dict = [{'username': usrnm} for usrnm in result]
 
     return result_dict
+
 
 def get_all_from_your_company(
         db: Database,

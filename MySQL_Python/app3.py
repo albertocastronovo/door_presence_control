@@ -23,7 +23,8 @@ from utilities.server_functions import (
     validate_rfid_event, name_from_rfid, get_user_rfid, fiscal_code_from_rfid, is_rfid_unique,
     interact_with_area, company_from_prefix,
     password_hash,
-    get_id_from_user, get_role_from_ids, am_i_sa, is_role_higher, does_username_exist
+    get_id_from_user, get_role_from_ids, am_i_sa, is_role_higher, does_username_exist,
+    company_presence_in_areas
 )
 from utilities.database import Database
 from utilities.custom_http_errors import DoorHTTPException
@@ -142,6 +143,11 @@ reset_user_creations()
 @jwt_required()
 def home():
     return jsonify({"msg": "hello world"}), 200
+
+
+@app.route("/testarea", methods=["GET"])
+def testarea():
+    return company_presence_in_areas(db, "IT98803960651")
 
 
 @app.route("/cookies", methods=["GET"])
