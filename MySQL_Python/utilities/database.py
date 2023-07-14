@@ -1,7 +1,19 @@
+import logging
+from datetime import datetime
 import mysql.connector as con
 from mysql.connector import errorcode as ec
 from mysql.connector.connection_cext import CMySQLConnection
 from mysql.connector.cursor_cext import CMySQLCursor
+
+logger = logging.getLogger("mysql.connector")
+logger.setLevel(logging.INFO)
+formatter_str = "[%(asctime)s] [%(name)s] [%(levelname)s] - %(message)s"
+formatter = logging.Formatter(formatter_str)
+stream_handler = logging.StreamHandler()
+stream_handler.setFormatter(formatter)
+logger.addHandler(stream_handler)
+file_name = "logs/DCS_" + datetime.now().strftime("%y_%m") + ".log"
+file_handler = logging.FileHandler(file_name)
 
 
 class Database:
@@ -36,17 +48,20 @@ class Database:
                 )
                 self.__connection = new_connection
                 self.__cursor = self.__connection.cursor(buffered=True, dictionary=True)
+                logger.info("Connection to database was successful.")
                 return 0
+
             except con.Error as err:
                 if err.errno == ec.ER_ACCESS_DENIED_ERROR:  # the user has no access permissions
-                    print(f"Access error. {err}")
+                    logger.error("User has no access permissions.")
                 elif err.errno == ec.ER_BAD_DB_ERROR:       # the database name is wrong
-                    print(f"Database error. {err}")
+                    logger.error("Wrong database name.")
                 else:
-                    print(f"Generic error. {err}")
+                    logger.error("Generic error.")
                 return -1
 
         else:
+            logger.info("Already connected to database.")
             return 1        # already connected
 
     def close_connection(self):
@@ -55,6 +70,20 @@ class Database:
             self.__connection.close()
             self.__cursor = None
             self.__connection = None
+            logger.info("Connection closed.")
+
+    def __db_log(self, level: str, message: str):
+        if not self.__connection.is_connected():
+            logger.warning("Cannot save log to database: not connected.")
+        table_name = "LOG_" + datetime.now().strftime("%y_%m")
+        create_str = f"CREATE TABLE IF NOT EXISTS {table_name} (id INT AUTO_INCREMENT PRIMARY KEY, timestamp DATETIME NOT NULL, level VARCHAR(10) NOT NULL, message TEXT NOT NULL);"
+        self.__cursor.execute(create_str)
+        self.__connection.commit()
+        timestamp = datetime.now().strftime("%y-%m-%d %H:%M:%S")
+        log_into_table = f"INSERT INTO {table_name} (timestamp, level, message) VALUES (%s, %s, %s)"
+        insert_data = (timestamp, level, message)
+        self.__cursor.execute(log_into_table, insert_data)
+        self.__connection.commit()
 
     def __execute_query(
             self,
@@ -63,6 +92,8 @@ class Database:
             disable_fetchall: bool = False
                      ):
         try:
+            logger.info(f"Executing query: {query} with parameters: {params}")
+            self.__db_log("INFO", f"Executing query: {query} with parameters: {params}")
             self.__cursor.execute(query, params)
             self.__connection.commit()
             if not disable_fetchall:
@@ -70,7 +101,8 @@ class Database:
             else:
                 return 1
         except con.Error as err:
-            print(f"Error: {err}")
+            logger.error(f"Error in query execution: {err}")
+            self.__db_log("ERROR", f"Error in query execution: {err}")
             return None
 
     def insert(
