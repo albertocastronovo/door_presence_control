@@ -497,13 +497,10 @@ def get_usernames_by_role_and_vat(
 
     # Get the userIDs from the filtered rows
     user_ids = [row['userID'] for row in filtered_rows]
-    print(user_ids)
 
     # Get the username values corresponding to the userIDs found in the user table
     result = [db.select_col_where("user", "username", "fiscal_code", user_id)[0]["username"] for user_id in
               user_ids if db.select_where('user', 'fiscal_code', user_id)]
-
-    print(result)
 
     # Remove from the list the username that corresponds to the person who is performing the action
     if user in result:
@@ -573,13 +570,10 @@ def get_companies_by_role_and_vat(
 
     # Get the userIDs from the filtered rows
     user_ids = [row['userID'] for row in filtered_rows]
-    print(user_ids)
 
     # Get the username values corresponding to the userIDs found in the user table
     result = [db.select_col_where("user", "username", "fiscal_code", user_id)[0]["username"] for user_id in
               user_ids if db.select_where('user', 'fiscal_code', user_id)]
-
-    print(result)
 
     # Remove from the list the username that corresponds to the person who is performing the action
     if user in result:
@@ -602,13 +596,10 @@ def get_all_from_your_company(
 
     # Get the userIDs from the filtered rows
     user_ids = [row['userID'] for row in user_to_customer_rows]
-    print(user_ids)
 
     # Get the username values corresponding to the userIDs found in the user table
     result = [db.select_col_where("user", "username", "fiscal_code", user_id)[0]["username"] for user_id in
               user_ids if db.select_where('user', 'fiscal_code', user_id)]
-
-    print(result)
 
     # Remove from the list the username that corresponds to the person who is performing the action
     if user in result:

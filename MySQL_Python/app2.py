@@ -12,7 +12,6 @@ from utilities.database import Database
 import os
 from datetime import datetime, timedelta
 import warnings
-import json
 
 warnings.filterwarnings("ignore", category=PytzUsageWarning)
 
@@ -181,7 +180,6 @@ def extract_from_db():
 @app.route('/db_company_data', methods=['GET'])
 @token_required
 def extract_from_company_db():
-
     user = request.headers.get("username")
     fiscal_code_user = db.select_col_where("user", "fiscal_code", "username", user)[0]["fiscal_code"]
     vat = db.select_col_where("user_to_customer", "cusID", "userID", fiscal_code_user)[0]["cusID"]
@@ -216,6 +214,7 @@ def stats():
 
     return jsonify(response)
 
+
 @app.route('/view_statisticsCO', methods=['GET'])
 @token_required
 def statsCO():
@@ -229,6 +228,7 @@ def statsCO():
     }
 
     return jsonify(response)
+
 
 @app.route('/view_statisticsCA', methods=['GET'])
 @token_required
@@ -251,20 +251,19 @@ def statsCA():
 def get_users_from_company():
     company = request.headers.get("company")
     user = request.headers.get("username")
-    vat = db.select_col_where("customer","cusID","name",company)[0]["cusID"]
+    vat = db.select_col_where("customer", "cusID", "name", company)[0]["cusID"]
     print(vat)
     # Chiamata alla funzione get_all_from_your_company per ottenere i dati
     response = get_all_from_your_company(db, vat, user)
-
     print(response)
 
     return jsonify(response)
+
+
 @app.route('/change_profile_data', methods=['POST'])
 @token_required
 def change_profile_data():
-
     username = request.headers.get("username")
-
     user = request.json.get("new_username")  # Use get method to allow for empty field
 
     # check unique username
@@ -312,7 +311,6 @@ def change_profile_data():
 @app.route('/usr_update', methods=['GET', 'POST', 'PUT', 'DELETE'])
 @token_required
 def usr_update():
-
     user = request.headers.get("username")
     fiscal_code_user = db.select_col_where("user", "fiscal_code", "username", user)[0]["fiscal_code"]
     role = db.select_col_where("user_to_customer", "role", "userID", fiscal_code_user)[0]["role"]
@@ -321,7 +319,6 @@ def usr_update():
     if request.method == 'GET':
 
         if role == "SA":
-
             all_usrs = db.select_col("user", "username")
             all_usrs_except_you = [d for d in all_usrs if d["username"] != user]
 
@@ -420,7 +417,6 @@ def usr_update():
         )
 
         if fiscal_code != "":
-
             update_usr_to_cstmr = db.update(
                 table="user_to_customer",
                 set_column="userID",
@@ -519,14 +515,13 @@ def rfid_card_management():
 @app.route('/get_USRs', methods=['GET'])
 @token_required
 def get_usrs():
-
     user = request.headers.get("username")
     fiscal_code_user = db.select_col_where("user", "fiscal_code", "username", user)[0]["fiscal_code"]
     vat = db.select_col_where("user_to_customer", "cusID", "userID", fiscal_code_user)[0]["cusID"]
     role = db.select_col_where("user_to_customer", "role", "userID", fiscal_code_user)[0]["role"]
-    
+
     if role == 'USR':
-        result_dict = get_only_users(db, vat)
+        return jsonify({'message': 'Not allowed.'})
     elif role == "SA":
         all_usrs = db.select_col("user", "username")
         result_dict = [d for d in all_usrs if d["username"] != user]
@@ -539,11 +534,35 @@ def get_usrs():
 @app.route('/get_companies', methods=['GET'])
 @token_required
 def get_companies():
-
     all_companies = db.select_col("customer", "name")
     print(all_companies)
 
     return jsonify(all_companies)
+
+
+@app.route('/impersonate', methods=['GET'])
+@token_required
+def impersonate():
+    user = request.headers.get("username")
+    fiscal_code_user = db.select_col_where("user", "fiscal_code", "username", user)[0]["fiscal_code"]
+    vat = db.select_col_where("user_to_customer", "cusID", "userID", fiscal_code_user)[0]["cusID"]
+    role = db.select_col_where("user_to_customer", "role", "userID", fiscal_code_user)[0]["role"]
+
+    if role == 'USR':
+        return jsonify({'message': 'Not allowed.'})
+    elif role == "SA":
+        all_usrs = db.select_col("user", "username")
+        result_dict = [d for d in all_usrs if d["username"] != user]
+    else:
+        result_dict = get_usernames_by_role_and_vat(db, role, vat, user)
+
+    result_lst_dict = [[d] for d in result_dict]
+    fiscal_codes = [get_id_from_user(db, guy["username"]) for guy in result_dict]
+    roles = [get_all_roles(db, fiscal_code) for fiscal_code in fiscal_codes]
+    user_and_roles = [[result[0], [role for role in role_list]] for result, role_list in zip(result_lst_dict, roles)]
+    print(user_and_roles)
+
+    return jsonify(user_and_roles)
 
 
 @app.route('/login', methods=['POST'])
@@ -563,40 +582,18 @@ def login():
         return jsonify({"exists": False}, {"registered": False}, roles)
     flag_psw = db.select_col_where("user", "flag_password_changed", "username", user)[0]["flag_password_changed"]
     print(flag_psw)
-
-    response = make_response("success")
-
-    # ??? #
-
-    if flag_psw == 0:
-        response.set_cookie("exists", "true")
-        response.set_cookie("registered", "false")
-        response.set_cookie("roles", "example_roles")
-
-        return response
-
-    # ??? #
-
-    fiscal_code = get_id_from_user(db, user)
-    roles = get_all_roles(db, fiscal_code)
+    result_dict = [{"username": user}]
+    print(result_dict)
+    fiscal_codes = [get_id_from_user(db, guy["username"]) for guy in result_dict]
+    print(fiscal_codes)
+    roles = [get_all_roles(db, fiscal_code) for fiscal_code in fiscal_codes]
     print(roles)
+    user_and_roles = [[result, [role for role in role_list]] for result, role_list in zip(result_dict, roles)]
+    print(user_and_roles)
     # Generates the JWT token
     token = jwt.encode({'username': user, 'exp': datetime.utcnow() + app.config['JWT_ACCESS_TOKEN_EXPIRES']},
                        app.config['JWT_SECRET_KEY'], algorithm='HS256')
-    return jsonify({"exists": True}, {"registered": True}, roles, {"token": token})
-
-
-@app.route('/impersonate', methods=['GET'])
-@token_required
-def impersonate():
-
-    user_to_impersonate = request.headers.get("username")
-    user_origin = get_jwt_identity()
-    # check
-    fiscal_code = get_id_from_user(db, user_to_impersonate)
-    roles = get_all_roles(db, fiscal_code)
-    print(roles)
-    return jsonify(roles)
+    return jsonify({"exists": True}, {"registered": True}, user_and_roles, {"token": token})
 
 
 ##### TO WRITE DOWN THE NEW LOGOUT FUNCTION #####
