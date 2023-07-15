@@ -14,6 +14,7 @@ from copy import deepcopy
 import time
 import requests
 import os
+import jwt
 import json
 
 # custom modules imports
@@ -24,7 +25,7 @@ from utilities.server_functions import (
     interact_with_area, company_from_prefix,
     password_hash,
     get_id_from_user, get_role_from_ids, am_i_sa, is_role_higher, does_username_exist,
-    company_presence_in_areas, get_user_from_email
+    company_presence_in_areas, get_user_from_email, get_all_roles
 )
 from utilities.database import Database
 from utilities.custom_http_errors import DoorHTTPException
@@ -35,7 +36,7 @@ from auth.auth import oauth_init
 
 # app configuration
 
-app_ip = "192.168.35.72"
+app_ip = "192.168.140.34"
 app_port = 5000
 app = Flask(__name__)
 
@@ -68,6 +69,7 @@ while True:
         user="root",
         password=""
     )
+
     if db.is_connected():
         print(f"Connected to database.")
         break
@@ -165,48 +167,61 @@ def login():
     if request.method == "GET":
         return render_template("basic_login.html")
     else:
-        user = request.form.get("username", None)
+
+        user = request.json["username"]
         from_browser = True
-        pw = request.form.get("password", None)
+        roles = {
+            "name": "COMPANY",
+            "role": "ROLE",
+            "cusID": "CUSID"
+        }
         if user is None:
             user = request.json.get("username", None)
             from_browser = False
-        if pw is None:
-            pw = request.json.get("password", None)
-        if user is None or pw is None:
-            return jsonify({"msg": "Invalid request"}), 400
-
         saved_hash = get_user_password(db, user)
         if saved_hash is None:
-            return jsonify({"msg": "Wrong username/password"}), 401
-
-        is_verified = password_verify(pw, saved_hash)
-        if not is_verified:
-            return jsonify({"msg": "Wrong username/password"}), 401
-
+            return jsonify({"exists": False}, {"registered": False}, roles)
+        user_pw = request.json["password"]
+        if user_pw is None:
+            user_pw = request.json.get("password", None)
+        if user is None or user_pw is None:
+            return jsonify({"msg": "Invalid request"}), 400
+        is_correct = password_verify(user_pw, saved_hash)
+        if not is_correct:
+            return jsonify({"exists": False}, {"registered": False}, roles)
         flag_psw_query = db.select_col_where("user", "flag_password_changed", "username", user)
         try:
             flag_psw = flag_psw_query[0]["flag_password_changed"]
             if flag_psw == 0:
-                return jsonify({"msg": "The user has to register first!"}), 461
-
+                return jsonify({"exists": True}, {"registered": False}, roles)
         except (IndexError, KeyError):
             return jsonify({"msg": "Error in retrieving user flags"}), 461
 
+        result_dict = [{"username": user}]
+        fiscal_codes = [get_id_from_user(db, guy["username"]) for guy in result_dict]
+        roles = [get_all_roles(db, fiscal_code) for fiscal_code in fiscal_codes]
+        user_and_roles = [[result, [role for role in role_list]] for result, role_list in zip(result_dict, roles)]
+        # Generates the JWT token
+
+        # token = jwt.encode({'username': user, 'exp': datetime.utcnow() + app.config['JWT_ACCESS_TOKEN_EXPIRES']},
+        #                    app.config['JWT_SECRET_KEY'], algorithm='HS256')
         access_token = create_access_token(identity=user)
-        refresh_token = create_refresh_token(identity=user)
+        return jsonify({"exists": True}, {"registered": True}, user_and_roles, {"token": access_token})
 
-        if from_browser:  # save the token in a secure cookie
-            response = make_response("Login successful!")
-            response.set_cookie("access_token", access_token, secure=True)
-            return response
-
-        return jsonify({"access_token": access_token,
-                        "refresh_token": refresh_token,
-                        "msg": "Login successful",
-                        "logged_user": user,
-                        "impersonated_user": user
-                        }), 200
+        # access_token = create_access_token(identity=user)
+        # refresh_token = create_refresh_token(identity=user)
+        #
+        # if from_browser:  # save the token in a secure cookie
+        #     response = make_response("Login successful!")
+        #     response.set_cookie("access_token", access_token, secure=True)
+        #     return response
+        #
+        # return jsonify({"access_token": access_token,
+        #                 "refresh_token": refresh_token,
+        #                 "msg": "Login successful",
+        #                 "logged_user": user,
+        #                 "impersonated_user": user
+        #                 }), 200
 
 
 @app.route('/authorize/google')
@@ -623,4 +638,4 @@ def create_user(user_data: dict) -> int:
 
 
 if __name__ == "__main__":
-    app.run(host=app_ip, port=app_port, ssl_context="adhoc")
+    app.run(host=app_ip, debug=True)

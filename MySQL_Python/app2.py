@@ -581,15 +581,12 @@ def login():
     if not is_correct:
         return jsonify({"exists": False}, {"registered": False}, roles)
     flag_psw = db.select_col_where("user", "flag_password_changed", "username", user)[0]["flag_password_changed"]
-    print(flag_psw)
+    if flag_psw == 0:
+        return jsonify({"exists": True}, {"registered": False}, roles)
     result_dict = [{"username": user}]
-    print(result_dict)
     fiscal_codes = [get_id_from_user(db, guy["username"]) for guy in result_dict]
-    print(fiscal_codes)
     roles = [get_all_roles(db, fiscal_code) for fiscal_code in fiscal_codes]
-    print(roles)
     user_and_roles = [[result, [role for role in role_list]] for result, role_list in zip(result_dict, roles)]
-    print(user_and_roles)
     # Generates the JWT token
     token = jwt.encode({'username': user, 'exp': datetime.utcnow() + app.config['JWT_ACCESS_TOKEN_EXPIRES']},
                        app.config['JWT_SECRET_KEY'], algorithm='HS256')
@@ -739,4 +736,4 @@ def login():
 
 
 if __name__ == '__main__':
-    app.run(host="localhost", debug=True)
+    app.run(host="192.168.140.34", debug=True)
