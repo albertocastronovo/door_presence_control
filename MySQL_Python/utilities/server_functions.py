@@ -142,7 +142,6 @@ def company_presence_in_areas(database: Database, company_id: str, roles: list |
     return out_dict
 
 
-
 def interact_with_area(database: Database, user: str, door_id: str) -> bool:
     company_id = company_from_prefix(database, door_id[:4])
     table_name = company_id.lower() + "_user_to_area"
@@ -197,6 +196,7 @@ def add_working_hours(database: Database, user: str, company_id: str, area_id: s
 
 
 def get_last_week_hours(database: Database, user: str, company_id: str, area_id: str | None = None):
+
     if area_id is None:
         table_name = company_id.lower() + "_defaults"
         default_query = database.select_where(table_name, "user_id", user)
@@ -359,7 +359,6 @@ def door_access_permissions(database: Database, company_id: str, user_id: str, d
     return match(access_permissions, door_id) is not None
 
 
-
 def day_interval(form, day) -> str | None:
     start = form.get(f"{day}_start", None)
     end = form.get(f"{day}_end", None)
@@ -453,8 +452,8 @@ def get_user_working_hours():
 
 
 def get_user_statistics(dictionary):
-    hours = dictionary["hours"]
 
+    hours = dictionary["hours"]
     mean = round(sum(hours) / len(hours), 3)
     mean_per_week = mean * 5
     giorno_max = dictionary["days"][hours.index(max(hours))]
@@ -535,7 +534,7 @@ def get_only_users(
     return result_dict
 
 
-def extract_name_from_string(data_string):  # FA SCHIFO MA FUNZIONA
+def extract_name_from_string(data_string):
     try:
         data_dict = json.loads(data_string)
         value = next(iter(data_dict.values()))
